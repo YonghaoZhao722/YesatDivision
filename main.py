@@ -84,29 +84,29 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Original Image")
     original_image = st.file_uploader("Upload phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
-    
+
     if original_image is not None:
         # Check file extension
         file_ext = original_image.name.split('.')[-1].lower()
-        
+
         # Specialized handling for TIF/TIFF files
         if file_ext in ['tif', 'tiff']:
             # Use tifffile for 16-bit TIFF images
             original_image.seek(0)
             image_array = tifffile.imread(original_image)
-            
+
             # Display with proper normalization for 16-bit images
             if image_array.dtype == np.uint16:
                 display_img = (image_array / 65535 * 255).astype(np.uint8)
             else:
                 display_img = image_array.astype(np.uint8)
-                
+
             # Ensure the image is in a displayable format
             if len(display_img.shape) == 2:  # grayscale
                 st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
             else:  # RGB or other
                 st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
-                
+
             # Ensure grayscale for processing
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
@@ -118,12 +118,12 @@ with col1:
                 display_img = image.convert('RGB')
             else:
                 display_img = image
-                
+
             st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
-            
+
             # Convert to numpy array for processing
             image_array = np.array(image)
-            
+
             # Handle grayscale vs color images
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
@@ -131,23 +131,23 @@ with col1:
 with col2:
     st.subheader("Segmentation Mask")
     mask_image = st.file_uploader("Upload segmentation mask", type=["jpg", "jpeg", "png", "tif", "tiff"])
-    
+
     if mask_image is not None:
         # Check file extension
         file_ext = mask_image.name.split('.')[-1].lower()
-        
+
         # Specialized handling for TIF/TIFF files
         if file_ext in ['tif', 'tiff']:
             # Use tifffile for 16-bit TIFF images
             mask_image.seek(0)
             mask_array = tifffile.imread(mask_image)
-            
+
             # Display with proper normalization for 16-bit images
             if mask_array.dtype == np.uint16:
                 display_mask = (mask_array / 65535 * 255).astype(np.uint8)
             else:
                 display_mask = mask_array.astype(np.uint8)
-                
+
             # Ensure the image is in a displayable format
             if len(display_mask.shape) == 2:  # grayscale
                 st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
@@ -161,16 +161,16 @@ with col2:
                 display_mask = mask.convert('RGB')
             else:
                 display_mask = mask
-                
+
             st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
-            
+
             # Convert to numpy array for processing
             mask_array = np.array(mask)
-        
+
         # Ensure mask is binary and has the correct data type
         if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
             mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
-            
+
         # Convert to uint8 to ensure compatibility with OpenCV functions
         if mask_array.dtype != np.uint8:
             if mask_array.dtype == np.uint16:
@@ -182,10 +182,10 @@ with col2:
             else:
                 # For other types, just convert
                 mask_array = mask_array.astype(np.uint8)
-                
+
         # Make sure the mask is binary (0 or 255)
         _, mask_array = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
-        
+
         # Optional: Apply morphological operations to ensure clean mask
         kernel = np.ones((3,3), np.uint8)
         mask_array = cv2.morphologyEx(mask_array, cv2.MORPH_CLOSE, kernel)
@@ -197,16 +197,16 @@ analyze_button = st.button("Analyze Cell Division")
 if original_image is not None and mask_image is not None:
     # Add a checkbox to toggle preprocessing preview
     show_preprocessing = st.checkbox("Show preprocessing preview", value=False)
-    
+
     if show_preprocessing:
         with st.spinner("Generating preview..."):
             try:
                 # Generate preprocessing preview
                 processed_image = preprocess_image(image_array, method=preprocessing_method)
-                
+
                 # Display original and processed images side by side for comparison
                 preview_col1, preview_col2 = st.columns(2)
-                
+
                 with preview_col1:
                     st.subheader("Original")
                     # Ensure the original image is properly displayed
@@ -217,12 +217,12 @@ if original_image is not None and mask_image is not None:
                         else:
                             display_original = np.clip(display_original * 255, 0, 255).astype(np.uint8)
                     st.image(display_original, caption="Original Image", use_container_width=True, clamp=True)
-                
+
                 with preview_col2:
                     st.subheader(f"Processed ({preprocessing_method})")
                     # Ensure the processed image is properly displayed
                     st.image(processed_image, caption="Processed Image", use_container_width=True, clamp=True)
-                    
+
                 st.markdown("---")
             except Exception as e:
                 st.error(f"Error generating preview: {str(e)}")
@@ -233,14 +233,14 @@ if original_image is not None and mask_image is not None and analyze_button:
         try:
             # Preprocess images
             processed_image = preprocess_image(image_array, method=preprocessing_method)
-            
+
             # Initialize analyzer with appropriate method
             analyzer = CellDivisionAnalyzer(
                 distance_threshold=distance_threshold,
                 size_ratio_threshold=size_ratio_threshold,
                 min_cell_size=min_cell_size
             )
-            
+
             # Run analysis based on selected method
             if cell_detection_method == "Distance-Based":
                 division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
@@ -251,33 +251,37 @@ if original_image is not None and mask_image is not None and analyze_button:
                     mask_array, 
                     confidence_threshold=confidence_threshold
                 )
-            
+
             # Display results
             st.subheader("Results")
-            
+
             if len(division_events) > 0:
                 st.success(f"Found {len(division_events)} potential cell division events")
-                
-                # Create visualization
-                visualization = create_visualization(
-                    original_image=image_array,
-                    mask=mask_array, 
-                    division_events=division_events,
-                    labeled_cells=labeled_cells
-                )
-                
-                st.image(visualization, caption="Cell Division Events", use_container_width=True)
-                
+
+                try:
+                    # Create visualization
+                    visualization = create_visualization(
+                        original_image=image_array,
+                        mask=mask_array, 
+                        division_events=division_events,
+                        labeled_cells=labeled_cells
+                    )
+
+                    st.image(visualization, caption="Cell Division Events", use_container_width=True)
+                except Exception as viz_error:
+                    st.error(f"Error creating visualization: {str(viz_error)}")
+                    st.warning("Visualization could not be generated, but division events were detected. Try adjusting parameters.")
+
                 # Display detailed results
                 st.subheader("Detailed Analysis")
                 formatted_results = format_results(division_events, labeled_cells)
                 st.table(formatted_results)
-                
+
                 # Download option for the visualization
                 buf = io.BytesIO()
                 plt.imsave(buf, visualization)
                 buf.seek(0)
-                
+
                 st.download_button(
                     label="Download Visualization",
                     data=buf,
@@ -286,7 +290,7 @@ if original_image is not None and mask_image is not None and analyze_button:
                 )
             else:
                 st.info("No cell division events detected with current parameters. Try adjusting the threshold values.")
-        
+
         except Exception as e:
             st.error(f"Error during analysis: {str(e)}")
 
@@ -294,7 +298,7 @@ if original_image is not None and mask_image is not None and analyze_button:
 with st.expander("How to use this application"):
     st.markdown("""
     ### Instructions:
-    
+
     1. Upload a phase contrast image of yeast cells
     2. Upload the corresponding segmentation mask (binary image with cell regions in white)
     3. Adjust the parameters if necessary:
@@ -303,16 +307,16 @@ with st.expander("How to use this application"):
        - Minimum Cell Size: Filters out small artifacts in the image
     4. Click "Analyze Cell Division" to process the images
     5. Review the results and download the visualization if needed
-    
+
     ### Methodology:
-    
+
     This application offers two detection methods:
-    
+
     #### Distance-Based Method:
     - Cell division events are identified when two cells are within the specified distance threshold
     - Mother and daughter cells are differentiated based on size (mothers are typically larger)
     - Basic confidence score calculated from distance and size ratio
-    
+
     #### Feature-Based (ML) Method:
     - Uses multiple cell features to identify division events (recommended for better accuracy)
     - Analyzes texture patterns, cell wall properties, and shape characteristics
@@ -323,9 +327,9 @@ with st.expander("How to use this application"):
       * Shape characteristics (roundness, eccentricity)
       * Intensity patterns
       * Contact area between cells
-    
+
     ### Tips for better results:
-    
+
     - Ensure the segmentation mask accurately represents cell boundaries
     - Try both detection methods and compare results
     - For Distance-Based method: adjust the distance and size ratio thresholds

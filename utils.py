@@ -124,8 +124,8 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
             np.random.randint(100, 255),
             np.random.randint(100, 255)
         ])
-        for i in range(3):
-            overlay[cell_mask, i] = color[i]
+        # Apply color to the overlay - fix indexing issue
+        overlay[cell_mask] = color
     
     # Add segmentation as semi-transparent overlay
     alpha = 0.35  # Slightly more opaque
@@ -136,7 +136,7 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         mother = event['mother_cell']
         daughter = event['daughter_cell']
         
-        # Draw centers of cells
+        # Draw centers of cells - ensure integer values for coordinates
         mother_center = (int(mother['center'][0]), int(mother['center'][1]))
         daughter_center = (int(daughter['center'][0]), int(daughter['center'][1]))
         
