@@ -78,7 +78,7 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
     original_image : numpy.ndarray
         Original phase contrast image
     mask : numpy.ndarray
-        Binary segmentation mask (ground truth)
+        Binary segmentation mask
     division_events : list
         List of division events detected
     labeled_cells : numpy.ndarray
@@ -103,29 +103,31 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         else:
             vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
     
-    # Create an overlay for the segmentation using original ground truth mask
+    # Create a colormap for labeled cells - using more distinct colors
+    cmap = plt.cm.get_cmap('tab20', np.max(labeled_cells) + 1)
+    
+    # Create an overlay for the segmentation
     overlay = np.zeros_like(vis_image)
     
-    # Ensure the mask is binary
+    # Make sure we use the original mask for visualization
     binary_mask = mask > 0
     
-    # Get connected components from the original mask
-    labeled_original, num_labels = cv2.connectedComponents(binary_mask.astype(np.uint8))
-    
-    # Generate random colors for each label in the original mask
+    # First, create a colored version of the original mask
+    mask_overlay = np.zeros_like(vis_image)
+    # Use random distinct colors for better visibility
     np.random.seed(42)  # For reproducible colors
     
-    # Create a unique color for each cell in the original ground truth mask
-    for label_id in range(1, num_labels + 1):
-        cell_mask = labeled_original == label_id
+    # Fill overlay with colors from the labeled cells
+    for label_id in range(1, np.max(labeled_cells) + 1):
+        cell_mask = labeled_cells == label_id
         # Generate a random color for this cell
         color = np.array([
             np.random.randint(100, 255),
             np.random.randint(100, 255),
             np.random.randint(100, 255)
         ])
-        # Apply color to the overlay - properly handle indexing
-        overlay[cell_mask] = color.reshape(1, 3)
+        for i in range(3):
+            overlay[cell_mask, i] = color[i]
     
     # Add segmentation as semi-transparent overlay
     alpha = 0.35  # Slightly more opaque
@@ -136,33 +138,28 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         mother = event['mother_cell']
         daughter = event['daughter_cell']
         
-        try:
-            # Draw centers of cells - ensure integer values for coordinates
-            mother_center = (int(round(mother['center'][0])), int(round(mother['center'][1])))
-            daughter_center = (int(round(daughter['center'][0])), int(round(daughter['center'][1])))
-            
-            # Draw a line connecting the cells
-            cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 2)
-            
-            # Draw circles for mother (red) and daughter (green) cells
-            cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 2)  # Red for mother
-            cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 2)  # Green for daughter
-            
-            # Add labels
-            cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-            cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            
-            # Add confidence score
-            confidence_pos = (int((mother_center[0] + daughter_center[0]) // 2),
-                              int((mother_center[1] + daughter_center[1]) // 2 - 15))
-            cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        except Exception as e:
-            # If there's an error with a specific event, log it but continue with other events
-            print(f"Error drawing event: {e}")
-            continue
+        # Draw centers of cells
+        mother_center = (int(mother['center'][0]), int(mother['center'][1]))
+        daughter_center = (int(daughter['center'][0]), int(daughter['center'][1]))
+        
+        # Draw a line connecting the cells
+        cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 2)
+        
+        # Draw circles for mother (red) and daughter (green) cells
+        cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 2)  # Red for mother
+        cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 2)  # Green for daughter
+        
+        # Add labels
+        cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Add confidence score
+        confidence_pos = ((mother_center[0] + daughter_center[0]) // 2,
+                          (mother_center[1] + daughter_center[1]) // 2 - 15)
+        cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
     return vis_image
 
