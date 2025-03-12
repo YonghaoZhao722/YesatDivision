@@ -166,27 +166,42 @@ with col2:
             mask_image.seek(0)
             mask_array = tifffile.imread(mask_image)
             
-            # Display with proper normalization for 16-bit images
-            if mask_array.dtype == np.uint16:
-                display_mask = (mask_array / 65535 * 255).astype(np.uint8)
-            else:
-                display_mask = mask_array.astype(np.uint8)
-                
-            # Ensure the image is in a displayable format
-            if len(display_mask.shape) == 2:  # grayscale
-                st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
-            else:  # RGB or other
-                st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
+            # Apply auto contrast to mask for better visualization
+            mask_auto_contrast = auto_contrast(mask_array, clip_percent=0.5)
+            
+            # Apply a colormap (Fire or Rainbow) to the mask for better visualization
+            # Create a colored version of the mask using matplotlib's 'hot' colormap (similar to Fiji's 'Fire')
+            cmap = plt.cm.get_cmap('hot')  # Similar to Fiji's 'Fire' LUT
+            colored_mask = cmap(mask_auto_contrast)
+            
+            # Convert to uint8 for display
+            colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
+            
+            # Display the colored mask
+            st.image(colored_mask, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
         else:
             # Standard handling for other image formats
             mask = Image.open(mask_image)
-            # Convert to RGB mode for display
-            if mask.mode in ['RGBA', 'LA', 'P', 'I', 'I;16']:
-                display_mask = mask.convert('RGB')
-            else:
-                display_mask = mask
+            # Convert to numpy array for processing
+            mask_array_temp = np.array(mask)
+            
+            # Convert to grayscale if needed
+            if len(mask_array_temp.shape) == 3 and mask_array_temp.shape[2] > 1:
+                mask_array_temp = cv2.cvtColor(mask_array_temp, cv2.COLOR_RGB2GRAY)
                 
-            st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
+            # Apply auto contrast to mask for better visualization
+            mask_auto_contrast = auto_contrast(mask_array_temp, clip_percent=0.5)
+            
+            # Apply a colormap (Fire or Rainbow) to the mask for better visualization
+            # Create a colored version of the mask using matplotlib's 'hot' colormap (similar to Fiji's 'Fire')
+            cmap = plt.cm.get_cmap('hot')  # Similar to Fiji's 'Fire' LUT
+            colored_mask = cmap(mask_auto_contrast)
+            
+            # Convert to uint8 for display
+            colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
+            
+            # Display the colored mask
+            st.image(colored_mask, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
             
             # Convert to numpy array for processing
             mask_array = np.array(mask)

@@ -77,7 +77,7 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
     Parameters:
     -----------
     original_image : numpy.ndarray
-        Original phase contrast image
+        Original phase contrast image (or auto-contrasted version)
     mask : numpy.ndarray
         Binary segmentation mask
     division_events : list
@@ -104,37 +104,63 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         else:
             vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
     
-    # Create a colormap for labeled cells - using more distinct colors
-    cmap = plt.cm.get_cmap('tab20', np.max(labeled_cells) + 1)
+    # Generate a Fiji-like colored version of the mask using a colormap
+    # Apply 'fire' LUT (similar to Fiji)
+    cmap_mask = plt.cm.get_cmap('hot')
     
-    # Create an overlay for the segmentation
-    overlay = np.zeros_like(vis_image)
+    # First convert binary mask to a more visually interesting representation
+    mask_for_vis = mask.copy()
+    if mask_for_vis.dtype == np.uint8:
+        # Convert to float for better gradient
+        mask_for_vis = mask_for_vis.astype(np.float32) / 255.0
     
-    # Make sure we use the original mask for visualization
-    binary_mask = mask > 0
+    # Apply the colormap
+    colored_mask = cmap_mask(mask_for_vis)
+    colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
     
-    # First, create a colored version of the original mask
+    # Overlay the colorful mask on the original image
+    alpha = 0.4  # Opacity of mask overlay
     mask_overlay = np.zeros_like(vis_image)
-    # Use random distinct colors for better visibility
-    np.random.seed(42)  # For reproducible colors
     
-    # Fill overlay with colors from the labeled cells
-    for label_id in range(1, np.max(labeled_cells) + 1):
+    # Apply color only where mask is active
+    binary_mask = mask > 0
+    for i in range(3):
+        mask_overlay[:, :, i] = np.where(binary_mask, colored_mask[:, :, i], 0)
+    
+    # Blend the colored mask with the original image
+    vis_image = cv2.addWeighted(mask_overlay, alpha, vis_image, 1.0, 0)
+    
+    # Highlight cells with different colors based on their IDs
+    # Use color code from Fiji's glasbey LUT for better distinction of cells
+    cell_overlay = np.zeros_like(vis_image)
+    
+    # Number of unique cell IDs
+    num_cells = np.max(labeled_cells)
+    
+    # Use colors from a perceptually distinct colormap
+    cmap_cells = plt.cm.get_cmap('tab20', max(20, num_cells+1))
+    
+    # Fill overlay with unique colors for each cell
+    for label_id in range(1, num_cells + 1):
         cell_mask = labeled_cells == label_id
-        # Generate a random color for this cell
+        
+        # Get a distinct color from the colormap
+        rgb_color = cmap_cells(label_id % 20)[:3]  # Take RGB part
+        
+        # Convert to uint8 and apply to mask
         color = np.array([
-            np.random.randint(100, 255),
-            np.random.randint(100, 255),
-            np.random.randint(100, 255)
+            int(rgb_color[0] * 255),
+            int(rgb_color[1] * 255),
+            int(rgb_color[2] * 255)
         ])
+        
         for i in range(3):
-            overlay[cell_mask, i] = color[i]
+            cell_overlay[cell_mask, i] = color[i]
     
-    # Add segmentation as semi-transparent overlay
-    alpha = 0.35  # Slightly more opaque
-    vis_image = cv2.addWeighted(overlay, alpha, vis_image, 1 - alpha, 0)
+    # Add cell overlay with a subtle transparency
+    vis_image = cv2.addWeighted(cell_overlay, 0.25, vis_image, 1.0, 0)
     
-    # Draw division events
+    # Draw division events with clearer markers
     for event in division_events:
         mother = event['mother_cell']
         daughter = event['daughter_cell']
@@ -143,24 +169,38 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         mother_center = (int(mother['center'][0]), int(mother['center'][1]))
         daughter_center = (int(daughter['center'][0]), int(daughter['center'][1]))
         
-        # Draw a line connecting the cells
-        cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 2)
+        # Draw a thicker line connecting the cells with yellow color
+        cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 3)
         
-        # Draw circles for mother (red) and daughter (green) cells
-        cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 2)  # Red for mother
-        cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 2)  # Green for daughter
+        # Draw circles for mother (red) and daughter (green) cells with more visibility
+        cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 3)  # Red for mother
+        cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 3)  # Green for daughter
         
-        # Add labels
+        # Add labels with better contrast for visibility
+        # Add white background to text for better readability
+        text_size = cv2.getTextSize("M", cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+        
+        # Mother cell label
         cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-        cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)  # Black outline
+        cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)  # White text
         
-        # Add confidence score
+        # Daughter cell label
+        cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)  # Black outline
+        cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)  # White text
+        
+        # Add confidence score with better visibility
         confidence_pos = ((mother_center[0] + daughter_center[0]) // 2,
                           (mother_center[1] + daughter_center[1]) // 2 - 15)
+        
+        # Add black outline to text for better readability
         cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4)  # Black outline
+        cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)  # White text
     
     return vis_image
 
