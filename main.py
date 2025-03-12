@@ -7,7 +7,7 @@ import io
 import os
 import tifffile
 from cell_analysis import CellDivisionAnalyzer
-from utils import preprocess_image, create_visualization, format_results
+from utils import preprocess_image, create_visualization, format_results, auto_contrast
 
 # Set page configuration
 st.set_page_config(
@@ -15,6 +15,18 @@ st.set_page_config(
     page_icon="🔬",
     layout="wide"
 )
+
+# Session state initialization for persistent analysis results
+if 'analyzed' not in st.session_state:
+    st.session_state.analyzed = False
+if 'division_events' not in st.session_state:
+    st.session_state.division_events = []
+if 'labeled_cells' not in st.session_state:
+    st.session_state.labeled_cells = None
+if 'visualization' not in st.session_state:
+    st.session_state.visualization = None
+if 'processed_image' not in st.session_state:
+    st.session_state.processed_image = None
 
 # App title and description
 st.title("Yeast Cell Division Analyzer")
@@ -28,8 +40,8 @@ st.sidebar.header("Parameters")
 distance_threshold = st.sidebar.slider(
     "Distance Threshold (pixels)",
     min_value=1,
-    max_value=100,
-    value=40,  # Increased for more permissive detection
+    max_value=150,
+    value=75,  # Updated as requested
     help="Maximum distance between cells to be considered as potential division"
 )
 
@@ -37,7 +49,7 @@ size_ratio_threshold = st.sidebar.slider(
     "Size Ratio Threshold",
     min_value=0.1,
     max_value=1.0,
-    value=0.4,  # Decreased to allow smaller daughter cells
+    value=0.5,  # Updated as requested
     step=0.05,
     help="Mother cells are typically larger than daughter cells (mother/daughter size ratio)"
 )
@@ -46,7 +58,7 @@ min_cell_size = st.sidebar.slider(
     "Minimum Cell Size (pixels)",
     min_value=10,
     max_value=1000,
-    value=50,  # Reduced to capture smaller cells
+    value=50,  # Cell minimum diameter instead of size
     help="Minimum size of a cell region to be considered"
 )
 
@@ -71,12 +83,12 @@ if cell_detection_method == "Feature-Based (ML)":
         "Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
-        value=0.2,  # Even lower threshold to detect more events
+        value=0.20,  # Updated as requested
         step=0.05,
         help="Minimum confidence score to consider a cell division event valid"
     )
 else:
-    confidence_threshold = 0.2  # Lower default value for distance-based method
+    confidence_threshold = 0.20  # Updated as requested
 
 # Main content area - file upload
 col1, col2 = st.columns(2)

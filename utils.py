@@ -1,7 +1,8 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-from skimage import exposure
+from skimage import exposure, morphology
+from skimage.util import img_as_float, img_as_ubyte
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -206,6 +207,69 @@ def format_results(division_events, labeled_cells):
     df = pd.DataFrame(results)
     
     return df
+
+def auto_contrast(image, clip_percent=0.5, gamma=1.0):
+    """
+    Apply auto contrast enhancement similar to Fiji's Auto Brightness/Contrast function.
+    
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image to enhance
+    clip_percent : float
+        Percentage of pixels to clip from histogram (0-100)
+    gamma : float
+        Gamma correction value
+    
+    Returns:
+    --------
+    enhanced_image : numpy.ndarray
+        Contrast-enhanced image
+    """
+    # Convert to float
+    img_float = img_as_float(image)
+    
+    # Flatten the image if it's multichannel
+    if len(img_float.shape) > 2:
+        img_flat = img_float.reshape(-1, img_float.shape[2])
+    else:
+        img_flat = img_float.flatten()
+        
+    # Calculate percentiles for clipping
+    low_percentile = clip_percent / 2.0
+    high_percentile = 100 - (clip_percent / 2.0)
+    
+    # Find the min and max values for contrast stretching
+    if len(img_float.shape) > 2:  # Color image
+        enhanced = np.zeros_like(img_float)
+        for i in range(img_float.shape[2]):
+            channel = img_float[..., i]
+            if np.min(channel) != np.max(channel):  # Avoid division by zero
+                p_low = np.percentile(channel, low_percentile)
+                p_high = np.percentile(channel, high_percentile)
+                enhanced_channel = exposure.rescale_intensity(channel, in_range=(p_low, p_high), out_range=(0, 1))
+                enhanced[..., i] = enhanced_channel
+            else:
+                enhanced[..., i] = channel
+    else:  # Grayscale image
+        if np.min(img_float) != np.max(img_float):  # Avoid division by zero
+            p_low = np.percentile(img_float, low_percentile)
+            p_high = np.percentile(img_float, high_percentile)
+            enhanced = exposure.rescale_intensity(img_float, in_range=(p_low, p_high), out_range=(0, 1))
+        else:
+            enhanced = img_float
+            
+    # Apply gamma correction
+    if gamma != 1.0:
+        enhanced = np.power(enhanced, gamma)
+    
+    # Convert back to original data type
+    if image.dtype == np.uint8:
+        return img_as_ubyte(enhanced)
+    elif image.dtype == np.uint16:
+        return (enhanced * 65535).astype(np.uint16)
+    else:
+        return enhanced
 
 def measure_cell_properties(image, mask, cell_id):
     """
