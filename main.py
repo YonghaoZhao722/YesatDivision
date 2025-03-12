@@ -78,6 +78,15 @@ min_cell_size = st.sidebar.slider(
     help="Minimum size of a cell region to be considered"
 )
 
+# Add overlay opacity control
+overlay_opacity = st.sidebar.slider(
+    "Overlay Opacity (%)",
+    min_value=10,
+    max_value=100,
+    value=30,  # Default 30% as requested
+    help="Control the opacity of the cell mask overlay"
+)
+
 st.sidebar.markdown("---")
 st.sidebar.header("Advanced Options")
 preprocessing_method = st.sidebar.selectbox(
@@ -235,21 +244,46 @@ analyze_button = st.button("Analyze Cell Division")
 # Process image for analysis in the background when both images are uploaded
 if original_image is not None and mask_image is not None:
     # Silently process images for analysis
-    if 'processed_image' not in st.session_state or preprocessing_method != st.session_state.last_preprocessing_method:
+    if ('processed_image' not in st.session_state or 
+        preprocessing_method != st.session_state.last_preprocessing_method or
+        'last_overlay_opacity' not in st.session_state or
+        st.session_state.last_overlay_opacity != overlay_opacity):
+        
         # Generate preprocessing using the selected method
         processed_image = preprocess_image(image_array, method=preprocessing_method)
         
         # Apply auto-contrast to the original image for better visualization
         auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
         
+        # Create labeled image (without division markers)
+        from skimage.measure import label
+        binary_mask = mask_array > 0
+        labeled_mask = label(binary_mask)
+        
+        # Create a Fiji-style overlay of the mask on the original image
+        overlay_image = create_visualization(
+            original_image=auto_contrast_image,
+            mask=mask_array,
+            division_events=[],  # No division events here
+            labeled_cells=labeled_mask,
+            overlay_opacity=overlay_opacity/100.0  # Convert percentage to decimal
+        )
+        
         # Store in session state
         st.session_state.processed_image = processed_image
         st.session_state.auto_contrast_image = auto_contrast_image
+        st.session_state.overlay_image = overlay_image
         st.session_state.last_preprocessing_method = preprocessing_method
+        st.session_state.last_overlay_opacity = overlay_opacity
     else:
         # Use cached results
         processed_image = st.session_state.processed_image
         auto_contrast_image = st.session_state.auto_contrast_image
+        overlay_image = st.session_state.overlay_image
+        
+    # Show the overlay of mask on original image
+    st.subheader("Segmentation Overlay")
+    st.image(st.session_state.overlay_image, caption=f"Overlay with {overlay_opacity}% opacity", use_container_width=True)
 
 # Process images when both are uploaded and button is clicked
 if original_image is not None and mask_image is not None and (analyze_button or st.session_state.analyzed):
@@ -300,7 +334,8 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                     original_image=auto_contrast_image,  # Use auto-contrast for visualization
                     mask=mask_array, 
                     division_events=division_events,
-                    labeled_cells=labeled_cells
+                    labeled_cells=labeled_cells,
+                    overlay_opacity=overlay_opacity/100.0  # Convert percentage to decimal
                 )
                 st.session_state.visualization = visualization
                 
