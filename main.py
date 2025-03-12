@@ -66,7 +66,10 @@ with col1:
     
     if original_image is not None:
         image = Image.open(original_image)
-        st.image(image, caption="Original Phase Contrast Image", use_column_width=True)
+        # Convert to RGB mode to ensure JPEG compatibility
+        if image.mode in ['RGBA', 'LA', 'P', 'I;16']:
+            image = image.convert('RGB')
+        st.image(image, caption="Original Phase Contrast Image", use_container_width=True)
         # Convert to numpy array for processing
         image_array = np.array(image)
         
@@ -80,7 +83,10 @@ with col2:
     
     if mask_image is not None:
         mask = Image.open(mask_image)
-        st.image(mask, caption="Segmentation Mask", use_column_width=True)
+        # Convert to RGB mode to ensure compatibility
+        if mask.mode in ['RGBA', 'LA', 'P', 'I;16']:
+            mask = mask.convert('RGB')
+        st.image(mask, caption="Segmentation Mask", use_container_width=True)
         # Convert to numpy array for processing
         mask_array = np.array(mask)
         
@@ -123,7 +129,7 @@ if original_image is not None and mask_image is not None and analyze_button:
                     labeled_cells=labeled_cells
                 )
                 
-                st.image(visualization, caption="Cell Division Events", use_column_width=True)
+                st.image(visualization, caption="Cell Division Events", use_container_width=True)
                 
                 # Display detailed results
                 st.subheader("Detailed Analysis")
