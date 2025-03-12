@@ -83,9 +83,9 @@ with col1:
                 
             # Ensure the image is in a displayable format
             if len(display_img.shape) == 2:  # grayscale
-                st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+                st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
             else:  # RGB or other
-                st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+                st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
                 
             # Ensure grayscale for processing
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
@@ -99,7 +99,7 @@ with col1:
             else:
                 display_img = image
                 
-            st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+            st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
             
             # Convert to numpy array for processing
             image_array = np.array(image)
@@ -130,9 +130,9 @@ with col2:
                 
             # Ensure the image is in a displayable format
             if len(display_mask.shape) == 2:  # grayscale
-                st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+                st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
             else:  # RGB or other
-                st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+                st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
         else:
             # Standard handling for other image formats
             mask = Image.open(mask_image)
@@ -142,14 +142,28 @@ with col2:
             else:
                 display_mask = mask
                 
-            st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+            st.image(display_mask, caption="Segmentation Mask", use_container_width=True)
             
             # Convert to numpy array for processing
             mask_array = np.array(mask)
         
-        # Ensure mask is binary
+        # Ensure mask is binary and has the correct data type
         if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
             mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
+            
+        # Convert to uint8 to ensure compatibility with OpenCV functions
+        if mask_array.dtype != np.uint8:
+            if mask_array.dtype == np.uint16:
+                # Scale 16-bit to 8-bit
+                mask_array = (mask_array / 256).astype(np.uint8)
+            elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
+                # Scale float to 8-bit
+                mask_array = (mask_array * 255).astype(np.uint8)
+            else:
+                # For other types, just convert
+                mask_array = mask_array.astype(np.uint8)
+                
+        # Apply threshold
         _, mask_array = cv2.threshold(mask_array, 127, 255, cv2.THRESH_BINARY)
 
 # Analyze button
