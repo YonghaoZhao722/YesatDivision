@@ -297,15 +297,31 @@ with st.expander("How to use this application"):
     
     ### Methodology:
     
+    This application offers two detection methods:
+    
+    #### Distance-Based Method:
     - Cell division events are identified when two cells are within the specified distance threshold
     - Mother and daughter cells are differentiated based on size (mothers are typically larger)
-    - Additional features like contact area and shape may be used for classification
+    - Basic confidence score calculated from distance and size ratio
+    
+    #### Feature-Based (ML) Method:
+    - Uses multiple cell features to identify division events (recommended for better accuracy)
+    - Analyzes texture patterns, cell wall properties, and shape characteristics
+    - Calculates confidence score using weighted combination of features
+    - Additional features analyzed:
+      * Cell wall thickness
+      * Texture differences (contrast, homogeneity, energy)
+      * Shape characteristics (roundness, eccentricity)
+      * Intensity patterns
+      * Contact area between cells
     
     ### Tips for better results:
     
     - Ensure the segmentation mask accurately represents cell boundaries
-    - Adjust the distance threshold based on the image resolution and cell density
-    - The size ratio threshold can be modified based on the specific yeast strain or growth conditions
+    - Try both detection methods and compare results
+    - For Distance-Based method: adjust the distance and size ratio thresholds
+    - For ML-Based method: adjust the confidence threshold
+    - Use the preprocessing options to improve image quality before analysis
     """)
 
 # Footer

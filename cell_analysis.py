@@ -2,7 +2,9 @@ import numpy as np
 import cv2
 from scipy.ndimage import label, center_of_mass, distance_transform_edt
 from skimage.measure import regionprops
+from skimage.feature import graycomatrix, graycoprops
 import pandas as pd
+from scipy.spatial.distance import pdist, squareform
 
 class CellDivisionAnalyzer:
     """
@@ -214,3 +216,283 @@ class CellDivisionAnalyzer:
         touch_area = (cell1_dilated & cell2_dilated) & ~(cell1_mask | cell2_mask)
         
         return np.sum(touch_area)
+        
+    def _extract_cell_features(self, image, labeled_cells, cell_prop):
+        """
+        Extract advanced features for a cell.
+        
+        Parameters:
+        -----------
+        image : numpy.ndarray
+            Original phase contrast image
+        labeled_cells : numpy.ndarray
+            Labeled image with unique ID for each cell
+        cell_prop : RegionProp
+            Properties of the cell region
+            
+        Returns:
+        --------
+        features : dict
+            Dictionary of cell features
+        """
+        # Create mask for this cell
+        cell_mask = labeled_cells == cell_prop.label
+        
+        # Extract basic shape features
+        area = cell_prop.area
+        perimeter = cell_prop.perimeter
+        eccentricity = cell_prop.eccentricity
+        
+        # Calculate roundness (circularity)
+        roundness = (4 * np.pi * area) / (perimeter * perimeter) if perimeter > 0 else 0
+        
+        # Calculate mean and standard deviation of intensity
+        if len(image.shape) == 3:  # RGB
+            intensity_mean = np.mean(image[cell_mask], axis=0)
+            intensity_std = np.std(image[cell_mask], axis=0)
+            # Average across channels
+            intensity_mean = np.mean(intensity_mean)
+            intensity_std = np.mean(intensity_std)
+        else:  # Grayscale
+            intensity_mean = np.mean(image[cell_mask])
+            intensity_std = np.std(image[cell_mask])
+        
+        # Detect cell wall
+        cell_wall = self.detect_cell_wall(image, cell_mask, labeled_cells, cell_prop.label)
+        wall_thickness = np.sum(cell_wall) / perimeter if perimeter > 0 else 0
+        
+        # Extract bounding box and calculate aspect ratio
+        min_row, min_col, max_row, max_col = cell_prop.bbox
+        width = max_col - min_col
+        height = max_row - min_row
+        aspect_ratio = width / height if height > 0 else 0
+        
+        # Calculate texture features if possible (requires grayscale image)
+        try:
+            # Extract the cell region
+            y_min, x_min, y_max, x_max = cell_prop.bbox
+            cell_region = image[y_min:y_max, x_min:x_max].copy()
+            
+            # Apply cell mask to get only cell pixels
+            mask_region = cell_mask[y_min:y_max, x_min:x_max]
+            if not np.any(mask_region):
+                # No valid pixels in this region
+                contrast = homogeneity = energy = correlation = 0
+            else:
+                # Normalize to 0-255 range for GLCM
+                if cell_region.max() > 0:
+                    cell_region = ((cell_region - cell_region.min()) / (cell_region.max() - cell_region.min()) * 255).astype(np.uint8)
+                
+                # Set background to 0
+                cell_region[~mask_region] = 0
+                
+                # Calculate GLCM
+                if np.any(cell_region):
+                    glcm = graycomatrix(cell_region, [1], [0, np.pi/4, np.pi/2, 3*np.pi/4], 256, symmetric=True, normed=True)
+                    # Extract features
+                    contrast = np.mean(graycoprops(glcm, 'contrast')[0])
+                    homogeneity = np.mean(graycoprops(glcm, 'homogeneity')[0])
+                    energy = np.mean(graycoprops(glcm, 'energy')[0])
+                    correlation = np.mean(graycoprops(glcm, 'correlation')[0])
+                else:
+                    contrast = homogeneity = energy = correlation = 0
+        except Exception as e:
+            # If texture features fail, use defaults
+            contrast = homogeneity = energy = correlation = 0
+        
+        # Return the feature dictionary
+        return {
+            'area': area,
+            'perimeter': perimeter,
+            'roundness': roundness,
+            'eccentricity': eccentricity,
+            'intensity_mean': intensity_mean,
+            'intensity_std': intensity_std,
+            'wall_thickness': wall_thickness,
+            'aspect_ratio': aspect_ratio,
+            'contrast': contrast,
+            'homogeneity': homogeneity,
+            'energy': energy,
+            'correlation': correlation
+        }
+        
+    def analyze_with_ml(self, image, mask, confidence_threshold=0.5):
+        """
+        Analyze the image and mask to detect cell division events using machine learning features.
+        
+        Parameters:
+        -----------
+        image : numpy.ndarray
+            Phase contrast image of yeast cells
+        mask : numpy.ndarray
+            Binary segmentation mask of the cells
+        confidence_threshold : float
+            Minimum confidence score to consider a cell division event valid
+            
+        Returns:
+        --------
+        division_events : list
+            List of dictionaries containing information about each division event
+        labeled_cells : numpy.ndarray
+            Labeled image with unique ID for each cell
+        """
+        # Label connected components in the mask
+        labeled_cells, num_cells = label(mask > 0)
+        
+        if num_cells < 2:
+            return [], labeled_cells
+        
+        # Extract properties for each region
+        cell_props = regionprops(labeled_cells)
+        
+        # Filter cells by size
+        valid_cells = [prop for prop in cell_props if prop.area >= self.min_cell_size]
+        
+        if len(valid_cells) < 2:
+            return [], labeled_cells
+        
+        # Store cell info with extended features
+        cells = []
+        for prop in valid_cells:
+            # Get cell center
+            center_y, center_x = prop.centroid
+            
+            # Extract advanced features
+            features = self._extract_cell_features(image, labeled_cells, prop)
+            
+            # Create cell data
+            cell = {
+                'label': prop.label,
+                'center': (center_x, center_y),
+                'area': features['area'],
+                'perimeter': features['perimeter'],
+                'roundness': features['roundness'],
+                'eccentricity': features['eccentricity'],
+                'intensity': features['intensity_mean'],
+                'intensity_std': features['intensity_std'],
+                'wall_thickness': features['wall_thickness'],
+                'aspect_ratio': features['aspect_ratio'],
+                'texture_contrast': features['contrast'],
+                'texture_homogeneity': features['homogeneity'],
+                'texture_energy': features['energy'],
+                'texture_correlation': features['correlation'],
+                'bounding_box': prop.bbox
+            }
+            cells.append(cell)
+        
+        # Calculate distance matrix between all cells
+        centers = np.array([cell['center'] for cell in cells])
+        if len(centers) > 1:
+            distances = squareform(pdist(centers, 'euclidean'))
+        else:
+            return [], labeled_cells
+        
+        # Find potential division events
+        division_events = []
+        
+        for i in range(len(cells)):
+            for j in range(i+1, len(cells)):
+                # Get distance between cell centers
+                distance = distances[i, j]
+                
+                # Check if cells are close enough to be a division event
+                if distance <= self.distance_threshold * 1.5:  # Use a slightly larger threshold for ML
+                    # Calculate touching area
+                    touch_area = self.calculate_touching_area(labeled_cells, cells[i]['label'], cells[j]['label'])
+                    
+                    # Identify mother and daughter cells based on size
+                    if cells[i]['area'] >= cells[j]['area']:
+                        mother_idx, daughter_idx = i, j
+                    else:
+                        mother_idx, daughter_idx = j, i
+                    
+                    # Calculate size ratio (daughter to mother)
+                    size_ratio = cells[daughter_idx]['area'] / cells[mother_idx]['area']
+                    
+                    # Extract features for ML-based confidence
+                    # Combination of distance, size ratio, shape differences, and texture differences
+                    # to determine if this is likely a real division event
+                    
+                    # Calculate feature differences that are indicative of mother-daughter relationship
+                    roundness_diff = abs(cells[mother_idx]['roundness'] - cells[daughter_idx]['roundness'])
+                    intensity_diff = abs(cells[mother_idx]['intensity'] - cells[daughter_idx]['intensity'])
+                    texture_diff = abs(cells[mother_idx]['texture_contrast'] - cells[daughter_idx]['texture_contrast'])
+                    eccentricity_diff = abs(cells[mother_idx]['eccentricity'] - cells[daughter_idx]['eccentricity'])
+                    
+                    # Calculate advanced confidence score
+                    confidence = self._calculate_ml_confidence(
+                        distance=distance,
+                        size_ratio=size_ratio,
+                        touch_area=touch_area,
+                        roundness_diff=roundness_diff,
+                        intensity_diff=intensity_diff,
+                        texture_diff=texture_diff,
+                        eccentricity_diff=eccentricity_diff,
+                        mother_cell=cells[mother_idx],
+                        daughter_cell=cells[daughter_idx]
+                    )
+                    
+                    # Only add events that meet the confidence threshold
+                    if confidence >= confidence_threshold:
+                        # Create event data
+                        event = {
+                            'mother_cell': cells[mother_idx],
+                            'daughter_cell': cells[daughter_idx],
+                            'distance': distance,
+                            'size_ratio': size_ratio,
+                            'touch_area': touch_area,
+                            'confidence': confidence
+                        }
+                        division_events.append(event)
+        
+        return division_events, labeled_cells
+        
+    def _calculate_ml_confidence(self, distance, size_ratio, touch_area, roundness_diff, 
+                               intensity_diff, texture_diff, eccentricity_diff,
+                               mother_cell, daughter_cell):
+        """
+        Calculate an advanced confidence score for a division event based on multiple features.
+        
+        Returns:
+        --------
+        confidence : float
+            Confidence score between 0 and 1
+        """
+        # Distance factor: lower distance = higher confidence
+        distance_factor = max(0, 1 - distance / (self.distance_threshold * 1.5))
+        
+        # Size ratio factor: daughter should be smaller than mother but not too small
+        # Ideal daughter/mother ratio is around 0.3-0.5 for yeast
+        ideal_ratio = 0.4
+        size_ratio_factor = max(0, 1 - abs(size_ratio - ideal_ratio) / 0.4)
+        
+        # Touch area factor: daughter cells often remain in contact with mother
+        # Normalize by the perimeter of the smaller cell
+        smaller_perimeter = min(mother_cell['perimeter'], daughter_cell['perimeter'])
+        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.25)) if smaller_perimeter > 0 else 0
+        
+        # Shape difference factor: daughter cells often have different shape than mothers
+        # But the difference shouldn't be too extreme
+        shape_factor = min(1.0, roundness_diff * 2.0) if roundness_diff < 0.5 else max(0, 2.0 - roundness_diff * 2.0)
+        
+        # Intensity factor: daughter cells often have different intensity than mothers
+        intensity_factor = min(1.0, intensity_diff / 30.0)
+        
+        # Texture factor: texture differences are common in mother-daughter pairs
+        texture_factor = min(1.0, texture_diff * 5.0)
+        
+        # Eccentricity factor: budding cells often have higher eccentricity
+        eccentricity_factor = min(1.0, eccentricity_diff * 2.0)
+        
+        # Combine all factors with weights
+        confidence = (
+            0.25 * distance_factor +
+            0.25 * size_ratio_factor +
+            0.15 * touch_factor +
+            0.10 * shape_factor +
+            0.10 * intensity_factor +
+            0.10 * texture_factor +
+            0.05 * eccentricity_factor
+        )
+        
+        return min(1.0, max(0.0, confidence))
