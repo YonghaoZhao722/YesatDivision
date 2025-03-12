@@ -98,23 +98,39 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
     
     # Make sure image is in the right format for display
     if vis_image.dtype != np.uint8:
-        vis_image = (vis_image * 255).astype(np.uint8)
+        if vis_image.max() <= 1.0:
+            vis_image = (vis_image * 255).astype(np.uint8)
+        else:
+            vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
     
-    # Create a colormap for labeled cells
+    # Create a colormap for labeled cells - using more distinct colors
     cmap = plt.cm.get_cmap('tab20', np.max(labeled_cells) + 1)
     
     # Create an overlay for the segmentation
     overlay = np.zeros_like(vis_image)
     
-    # Fill overlay with colors for each cell
+    # Make sure we use the original mask for visualization
+    binary_mask = mask > 0
+    
+    # First, create a colored version of the original mask
+    mask_overlay = np.zeros_like(vis_image)
+    # Use random distinct colors for better visibility
+    np.random.seed(42)  # For reproducible colors
+    
+    # Fill overlay with colors from the labeled cells
     for label_id in range(1, np.max(labeled_cells) + 1):
         cell_mask = labeled_cells == label_id
-        color = np.array(cmap(label_id)[:3]) * 255
+        # Generate a random color for this cell
+        color = np.array([
+            np.random.randint(100, 255),
+            np.random.randint(100, 255),
+            np.random.randint(100, 255)
+        ])
         for i in range(3):
             overlay[cell_mask, i] = color[i]
     
     # Add segmentation as semi-transparent overlay
-    alpha = 0.3
+    alpha = 0.35  # Slightly more opaque
     vis_image = cv2.addWeighted(overlay, alpha, vis_image, 1 - alpha, 0)
     
     # Draw division events

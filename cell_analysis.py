@@ -316,7 +316,7 @@ class CellDivisionAnalyzer:
             'correlation': correlation
         }
         
-    def analyze_with_ml(self, image, mask, confidence_threshold=0.5):
+    def analyze_with_ml(self, image, mask, confidence_threshold=0.3):
         """
         Analyze the image and mask to detect cell division events using machine learning features.
         
@@ -336,8 +336,47 @@ class CellDivisionAnalyzer:
         labeled_cells : numpy.ndarray
             Labeled image with unique ID for each cell
         """
-        # Label connected components in the mask
-        labeled_cells, num_cells = label(mask > 0)
+        # Make sure the mask is binary
+        mask_binary = (mask > 0).astype(np.uint8) * 255
+        
+        # Apply watershed segmentation to better separate touching cells
+        # First find sure background
+        sure_bg = cv2.dilate(mask_binary, np.ones((3,3), np.uint8), iterations=1)
+        
+        # Finding sure foreground area using distance transform
+        dist_transform = cv2.distanceTransform(mask_binary, cv2.DIST_L2, 5)
+        _, sure_fg = cv2.threshold(dist_transform, 0.5*dist_transform.max(), 255, 0)
+        sure_fg = sure_fg.astype(np.uint8)
+        
+        # Finding unknown region
+        unknown = cv2.subtract(sure_bg, sure_fg)
+        
+        # Label the foreground objects
+        _, markers = cv2.connectedComponents(sure_fg)
+        
+        # Add one to all labels so that background is 1 instead of 0
+        markers = markers + 1
+        
+        # Mark the unknown region with 0
+        markers[unknown == 255] = 0
+        
+        # Apply watershed
+        if len(image.shape) == 2:
+            # Convert to 3-channel for watershed
+            image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            image_color = image.copy()
+            
+        # Apply watershed
+        cv2.watershed(image_color, markers)
+        
+        # Use the watershed result as our labeled cells
+        labeled_cells = markers.copy()
+        labeled_cells[labeled_cells == 1] = 0  # Remove background
+        labeled_cells[labeled_cells == -1] = 0  # Remove watershed boundaries
+        
+        # Count number of cells
+        num_cells = np.max(labeled_cells)
         
         if num_cells < 2:
             return [], labeled_cells
@@ -458,39 +497,44 @@ class CellDivisionAnalyzer:
         confidence : float
             Confidence score between 0 and 1
         """
-        # Distance factor: lower distance = higher confidence (more permissive)
-        distance_factor = max(0, 1 - distance / (self.distance_threshold * 2.0))
+        # Distance factor: much more permissive to catch more potential divisions
+        distance_factor = max(0, 1 - distance / (self.distance_threshold * 3.0))
         
-        # Size ratio factor: broader acceptable range for mother/daughter ratio
-        ideal_ratio = 0.5  # Increased from 0.4
-        size_ratio_factor = max(0, 1 - abs(size_ratio - ideal_ratio) / 0.5)  # More permissive
+        # Size ratio factor: even more permissive for yeast buds which can be quite small
+        ideal_ratio = 0.4  # Allow smaller daughter cells
+        # More permissive on size ratio
+        size_ratio_factor = 1.0 if size_ratio <= 0.7 else max(0, 2.0 - size_ratio * 2.0)
         
         # Touch area factor: daughter cells often remain in contact with mother
-        # Normalize by the perimeter of the smaller cell (more permissive)
+        # Higher weight on touch area
         smaller_perimeter = min(mother_cell['perimeter'], daughter_cell['perimeter'])
-        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.2)) if smaller_perimeter > 0 else 0.5  # Default to 0.5 if no perimeter
+        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.1)) if smaller_perimeter > 0 else 0.7
         
-        # Shape difference factor: more permissive on shape differences
-        shape_factor = min(1.0, roundness_diff * 3.0) if roundness_diff < 0.5 else max(0.3, 2.0 - roundness_diff * 2.0)
+        # Shape difference factor: budding yeast have distinctive shape differences
+        shape_factor = 0.7  # Base confidence is higher for shape
         
-        # Intensity factor: more permissive
-        intensity_factor = min(1.0, intensity_diff / 20.0) + 0.2  # Add base confidence
+        # Intensity factor: daughter cells often have different intensity
+        intensity_factor = 0.5 + min(0.5, intensity_diff / 30.0)
         
-        # Texture factor: more permissive
-        texture_factor = min(1.0, texture_diff * 7.0) + 0.2  # Add base confidence
+        # Texture factor: more weight on texture differences
+        texture_factor = 0.5 + min(0.5, texture_diff * 5.0)
         
-        # Eccentricity factor: more permissive
-        eccentricity_factor = min(1.0, eccentricity_diff * 3.0) + 0.2  # Add base confidence
+        # Eccentricity factor: mother cells tend to be more round than buds
+        eccentricity_factor = 0.5 + min(0.5, eccentricity_diff * 2.0)
         
-        # Combine all factors with weights (slightly adjusted to favor distance and size)
+        # Combine factors with weights adjusted to be more permissive
         confidence = (
-            0.30 * distance_factor +
-            0.25 * size_ratio_factor +
-            0.15 * touch_factor +
-            0.10 * shape_factor +
-            0.07 * intensity_factor +
-            0.08 * texture_factor +
-            0.05 * eccentricity_factor
+            0.25 * distance_factor +     # Distance is important
+            0.25 * size_ratio_factor +   # Size ratio is important
+            0.15 * touch_factor +        # Touch area is important for budding yeast
+            0.10 * shape_factor +        # Shape differences
+            0.10 * intensity_factor +    # Intensity differences
+            0.10 * texture_factor +      # Texture differences
+            0.05 * eccentricity_factor   # Minor weight on eccentricity
         )
+        
+        # Boost confidence for clearly adjacent cells
+        if distance < (self.distance_threshold * 0.5) and touch_area > 0:
+            confidence = min(1.0, confidence * 1.3)
         
         return min(1.0, max(0.0, confidence))

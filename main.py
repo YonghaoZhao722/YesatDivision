@@ -29,7 +29,7 @@ distance_threshold = st.sidebar.slider(
     "Distance Threshold (pixels)",
     min_value=1,
     max_value=100,
-    value=30,
+    value=40,  # Increased for more permissive detection
     help="Maximum distance between cells to be considered as potential division"
 )
 
@@ -37,7 +37,7 @@ size_ratio_threshold = st.sidebar.slider(
     "Size Ratio Threshold",
     min_value=0.1,
     max_value=1.0,
-    value=0.5,
+    value=0.4,  # Decreased to allow smaller daughter cells
     step=0.05,
     help="Mother cells are typically larger than daughter cells (mother/daughter size ratio)"
 )
@@ -46,7 +46,7 @@ min_cell_size = st.sidebar.slider(
     "Minimum Cell Size (pixels)",
     min_value=10,
     max_value=1000,
-    value=100,
+    value=50,  # Reduced to capture smaller cells
     help="Minimum size of a cell region to be considered"
 )
 
@@ -71,12 +71,12 @@ if cell_detection_method == "Feature-Based (ML)":
         "Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
-        value=0.3,  # Lower threshold to detect more events
+        value=0.2,  # Even lower threshold to detect more events
         step=0.05,
         help="Minimum confidence score to consider a cell division event valid"
     )
 else:
-    confidence_threshold = 0.3  # Lower default value for distance-based method
+    confidence_threshold = 0.2  # Lower default value for distance-based method
 
 # Main content area - file upload
 col1, col2 = st.columns(2)
@@ -183,8 +183,12 @@ with col2:
                 # For other types, just convert
                 mask_array = mask_array.astype(np.uint8)
                 
-        # Apply threshold
-        _, mask_array = cv2.threshold(mask_array, 127, 255, cv2.THRESH_BINARY)
+        # Make sure the mask is binary (0 or 255)
+        _, mask_array = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
+        
+        # Optional: Apply morphological operations to ensure clean mask
+        kernel = np.ones((3,3), np.uint8)
+        mask_array = cv2.morphologyEx(mask_array, cv2.MORPH_CLOSE, kernel)
 
 # Analyze button
 analyze_button = st.button("Analyze Cell Division")
