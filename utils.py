@@ -24,32 +24,45 @@ def preprocess_image(image, method="Basic"):
     # Make a copy to avoid modifying the original
     processed_image = image.copy()
     
-    # Convert to float for processing
-    if processed_image.dtype != np.float32:
-        processed_image = processed_image.astype(np.float32)
+    # Ensure image is in the right format for processing
+    if processed_image.dtype != np.uint8:
+        if processed_image.dtype == np.uint16:
+            # Scale 16-bit to 8-bit
+            processed_image = (processed_image / 256).astype(np.uint8)
+        elif processed_image.dtype == np.float32 or processed_image.dtype == np.float64:
+            if processed_image.max() <= 1.0:
+                processed_image = (processed_image * 255).astype(np.uint8)
+            else:
+                processed_image = processed_image.astype(np.uint8)
+        else:
+            processed_image = processed_image.astype(np.uint8)
     
-    # Normalize to 0-1 range if needed
-    if processed_image.max() > 1.0:
-        processed_image = processed_image / 255.0
+    # Convert to float32 for processing, scaled to 0-1
+    processed_image_float = processed_image.astype(np.float32) / 255.0
     
     # Apply different preprocessing methods
     if method == "Basic":
         # Basic normalization
-        processed_image = (processed_image - processed_image.min()) / (processed_image.max() - processed_image.min())
+        if processed_image_float.min() != processed_image_float.max():
+            processed_image_float = (processed_image_float - processed_image_float.min()) / (processed_image_float.max() - processed_image_float.min())
+        # No change needed if min==max (uniform image)
         
     elif method == "Contrast Enhancement":
         # Adaptive histogram equalization for better contrast
-        processed_image = exposure.equalize_adapthist(processed_image)
+        processed_image_float = exposure.equalize_adapthist(processed_image_float)
         
     elif method == "Noise Reduction":
-        # Gaussian blur to reduce noise
-        processed_image = cv2.GaussianBlur(processed_image, (5, 5), 0)
-        
-        # Contrast enhancement after noise reduction
-        processed_image = exposure.equalize_adapthist(processed_image)
+        # First convert back to uint8 for GaussianBlur
+        temp_img = (processed_image_float * 255).astype(np.uint8)
+        # Apply gaussian blur
+        temp_img = cv2.GaussianBlur(temp_img, (5, 5), 0)
+        # Back to float
+        processed_image_float = temp_img.astype(np.float32) / 255.0
+        # Then contrast enhancement
+        processed_image_float = exposure.equalize_adapthist(processed_image_float)
     
-    # Convert back to 0-255 range
-    processed_image = (processed_image * 255).astype(np.uint8)
+    # Convert back to 0-255 range for return
+    processed_image = (processed_image_float * 255).astype(np.uint8)
     
     return processed_image
 

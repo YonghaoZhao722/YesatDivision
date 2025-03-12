@@ -58,6 +58,26 @@ preprocessing_method = st.sidebar.selectbox(
     index=0
 )
 
+cell_detection_method = st.sidebar.selectbox(
+    "Cell Division Detection Method",
+    options=["Distance-Based", "Feature-Based (ML)"],
+    index=0,
+    help="Distance-Based: Uses physical proximity and size. Feature-Based: Uses machine learning with multiple cell features."
+)
+
+# Show confidence threshold only for ML method
+if cell_detection_method == "Feature-Based (ML)":
+    confidence_threshold = st.sidebar.slider(
+        "Confidence Threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5,
+        step=0.05,
+        help="Minimum confidence score to consider a cell division event valid"
+    )
+else:
+    confidence_threshold = 0.5  # Default value for distance-based method
+
 # Main content area - file upload
 col1, col2 = st.columns(2)
 
@@ -169,6 +189,35 @@ with col2:
 # Analyze button
 analyze_button = st.button("Analyze Cell Division")
 
+# Preview preprocessing when both images are uploaded
+if original_image is not None and mask_image is not None:
+    # Add a checkbox to toggle preprocessing preview
+    show_preprocessing = st.checkbox("Show preprocessing preview", value=False)
+    
+    if show_preprocessing:
+        with st.spinner("Generating preview..."):
+            try:
+                # Generate preprocessing preview
+                processed_image = preprocess_image(image_array, method=preprocessing_method)
+                
+                # Display original and processed images side by side for comparison
+                preview_col1, preview_col2 = st.columns(2)
+                
+                with preview_col1:
+                    st.subheader("Original")
+                    if len(image_array.shape) == 2:  # grayscale
+                        st.image(image_array, caption="Original Image", use_container_width=True)
+                    else:  # RGB
+                        st.image(image_array, caption="Original Image", use_container_width=True)
+                
+                with preview_col2:
+                    st.subheader(f"Processed ({preprocessing_method})")
+                    st.image(processed_image, caption="Processed Image", use_container_width=True)
+                    
+                st.markdown("---")
+            except Exception as e:
+                st.error(f"Error generating preview: {str(e)}")
+
 # Process images when both are uploaded and button is clicked
 if original_image is not None and mask_image is not None and analyze_button:
     with st.spinner("Analyzing cell division events..."):
@@ -176,15 +225,23 @@ if original_image is not None and mask_image is not None and analyze_button:
             # Preprocess images
             processed_image = preprocess_image(image_array, method=preprocessing_method)
             
-            # Initialize analyzer
+            # Initialize analyzer with appropriate method
             analyzer = CellDivisionAnalyzer(
                 distance_threshold=distance_threshold,
                 size_ratio_threshold=size_ratio_threshold,
                 min_cell_size=min_cell_size
             )
             
-            # Run analysis
-            division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
+            # Run analysis based on selected method
+            if cell_detection_method == "Distance-Based":
+                division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
+            else:  # "Feature-Based (ML)"
+                # Use the machine learning method with more features
+                division_events, labeled_cells = analyzer.analyze_with_ml(
+                    processed_image, 
+                    mask_array, 
+                    confidence_threshold=confidence_threshold
+                )
             
             # Display results
             st.subheader("Results")
