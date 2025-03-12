@@ -325,7 +325,7 @@ class CellDivisionAnalyzer:
         image : numpy.ndarray
             Phase contrast image of yeast cells
         mask : numpy.ndarray
-            Binary segmentation mask of the cells
+            Binary segmentation mask of the cells (ground truth)
         confidence_threshold : float
             Minimum confidence score to consider a cell division event valid
             
@@ -339,13 +339,22 @@ class CellDivisionAnalyzer:
         # Make sure the mask is binary
         mask_binary = (mask > 0).astype(np.uint8) * 255
         
-        # Apply watershed segmentation to better separate touching cells
+        # Store a copy of the original mask for visualization
+        original_mask = mask_binary.copy()
+        
+        # First, use the connected components from the original ground truth mask
+        # This preserves the exact cell shapes from the uploaded mask
+        labeled_original, _ = cv2.connectedComponents(mask_binary)
+        
+        # Also apply watershed to help separate touching cells where needed
+        # This helps in detecting buds that might be connected in the binary mask
+        
         # First find sure background
         sure_bg = cv2.dilate(mask_binary, np.ones((3,3), np.uint8), iterations=1)
         
         # Finding sure foreground area using distance transform
         dist_transform = cv2.distanceTransform(mask_binary, cv2.DIST_L2, 5)
-        _, sure_fg = cv2.threshold(dist_transform, 0.5*dist_transform.max(), 255, 0)
+        _, sure_fg = cv2.threshold(dist_transform, 0.3*dist_transform.max(), 255, 0)  # Lower threshold to capture more cells
         sure_fg = sure_fg.astype(np.uint8)
         
         # Finding unknown region
@@ -374,6 +383,8 @@ class CellDivisionAnalyzer:
         labeled_cells = markers.copy()
         labeled_cells[labeled_cells == 1] = 0  # Remove background
         labeled_cells[labeled_cells == -1] = 0  # Remove watershed boundaries
+        
+        # We'll use labeled_cells for algorithm processing, but preserve original_mask for visualization
         
         # Count number of cells
         num_cells = np.max(labeled_cells)
@@ -497,36 +508,36 @@ class CellDivisionAnalyzer:
         confidence : float
             Confidence score between 0 and 1
         """
-        # Distance factor: much more permissive to catch more potential divisions
-        distance_factor = max(0, 1 - distance / (self.distance_threshold * 3.0))
+        # Distance factor: even more permissive to catch more potential divisions
+        distance_factor = max(0, 1.2 - distance / (self.distance_threshold * 4.0))
         
-        # Size ratio factor: even more permissive for yeast buds which can be quite small
-        ideal_ratio = 0.4  # Allow smaller daughter cells
+        # Size ratio factor: much more permissive for yeast buds which can be very small
+        ideal_ratio = 0.2  # Allow even smaller daughter cells
         # More permissive on size ratio
-        size_ratio_factor = 1.0 if size_ratio <= 0.7 else max(0, 2.0 - size_ratio * 2.0)
+        size_ratio_factor = 1.0 if size_ratio <= 0.8 else max(0, 2.0 - size_ratio * 1.5)
         
         # Touch area factor: daughter cells often remain in contact with mother
         # Higher weight on touch area
         smaller_perimeter = min(mother_cell['perimeter'], daughter_cell['perimeter'])
-        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.1)) if smaller_perimeter > 0 else 0.7
+        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.05)) if smaller_perimeter > 0 else 0.8
         
         # Shape difference factor: budding yeast have distinctive shape differences
-        shape_factor = 0.7  # Base confidence is higher for shape
+        shape_factor = 0.8  # Higher base confidence for shape
         
         # Intensity factor: daughter cells often have different intensity
-        intensity_factor = 0.5 + min(0.5, intensity_diff / 30.0)
+        intensity_factor = 0.6 + min(0.4, intensity_diff / 20.0)
         
         # Texture factor: more weight on texture differences
-        texture_factor = 0.5 + min(0.5, texture_diff * 5.0)
+        texture_factor = 0.6 + min(0.4, texture_diff * 8.0)
         
         # Eccentricity factor: mother cells tend to be more round than buds
-        eccentricity_factor = 0.5 + min(0.5, eccentricity_diff * 2.0)
+        eccentricity_factor = 0.6 + min(0.4, eccentricity_diff * 3.0)
         
-        # Combine factors with weights adjusted to be more permissive
+        # Combine factors with weights adjusted to be much more permissive
         confidence = (
-            0.25 * distance_factor +     # Distance is important
-            0.25 * size_ratio_factor +   # Size ratio is important
-            0.15 * touch_factor +        # Touch area is important for budding yeast
+            0.20 * distance_factor +     # Distance still important but less weight
+            0.25 * size_ratio_factor +   # Size ratio is important for budding
+            0.20 * touch_factor +        # More emphasis on touch area for budding yeast
             0.10 * shape_factor +        # Shape differences
             0.10 * intensity_factor +    # Intensity differences
             0.10 * texture_factor +      # Texture differences
@@ -534,7 +545,11 @@ class CellDivisionAnalyzer:
         )
         
         # Boost confidence for clearly adjacent cells
-        if distance < (self.distance_threshold * 0.5) and touch_area > 0:
-            confidence = min(1.0, confidence * 1.3)
+        if distance < (self.distance_threshold * 0.7) and touch_area > 0:
+            confidence = min(1.0, confidence * 1.5)  # Stronger boost
+        
+        # Additional boost for very small cells likely to be buds
+        if size_ratio < 0.3 and distance < self.distance_threshold:
+            confidence = min(1.0, confidence * 1.3)  # Boost for clear mother-daughter size difference
         
         return min(1.0, max(0.0, confidence))

@@ -71,12 +71,12 @@ if cell_detection_method == "Feature-Based (ML)":
         "Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
-        value=0.2,  # Even lower threshold to detect more events
+        value=0.1,  # Much lower threshold to detect more events
         step=0.05,
         help="Minimum confidence score to consider a cell division event valid"
     )
 else:
-    confidence_threshold = 0.2  # Lower default value for distance-based method
+    confidence_threshold = 0.1  # Much lower default value for distance-based method
 
 # Main content area - file upload
 col1, col2 = st.columns(2)

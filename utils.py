@@ -78,7 +78,7 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
     original_image : numpy.ndarray
         Original phase contrast image
     mask : numpy.ndarray
-        Binary segmentation mask
+        Binary segmentation mask (ground truth)
     division_events : list
         List of division events detected
     labeled_cells : numpy.ndarray
@@ -103,23 +103,21 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         else:
             vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
     
-    # Create a colormap for labeled cells - using more distinct colors
-    cmap = plt.cm.get_cmap('tab20', np.max(labeled_cells) + 1)
-    
-    # Create an overlay for the segmentation
+    # Create an overlay for the segmentation using original ground truth mask
     overlay = np.zeros_like(vis_image)
     
-    # Make sure we use the original mask for visualization
+    # Ensure the mask is binary
     binary_mask = mask > 0
     
-    # First, create a colored version of the original mask
-    mask_overlay = np.zeros_like(vis_image)
-    # Use random distinct colors for better visibility
+    # Get connected components from the original mask
+    labeled_original, num_labels = cv2.connectedComponents(binary_mask.astype(np.uint8))
+    
+    # Generate random colors for each label in the original mask
     np.random.seed(42)  # For reproducible colors
     
-    # Fill overlay with colors from the labeled cells
-    for label_id in range(1, np.max(labeled_cells) + 1):
-        cell_mask = labeled_cells == label_id
+    # Create a unique color for each cell in the original ground truth mask
+    for label_id in range(1, num_labels + 1):
+        cell_mask = labeled_original == label_id
         # Generate a random color for this cell
         color = np.array([
             np.random.randint(100, 255),
