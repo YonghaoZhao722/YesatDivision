@@ -211,7 +211,7 @@ def format_results(division_events, labeled_cells):
 def auto_contrast(image, clip_percent=0.5, gamma=1.0):
     """
     Apply auto contrast enhancement similar to Fiji's Auto Brightness/Contrast function.
-    This implementation closely mimics Fiji's algorithm for better visualization.
+    This implementation closely mimics Fiji's algorithm for better visualization of microscopy images.
     
     Parameters:
     -----------
@@ -225,88 +225,94 @@ def auto_contrast(image, clip_percent=0.5, gamma=1.0):
     Returns:
     --------
     enhanced_image : numpy.ndarray
-        Contrast-enhanced image
+        Contrast-enhanced image ready for display
     """
     # Make a copy to avoid modifying the original
     img_copy = image.copy()
     
-    # Handle 16-bit images properly - Fiji-like behavior
+    # For 16-bit TIF images, we need special handling
     if img_copy.dtype == np.uint16:
-        # Work with the original data range for 16-bit images
+        # Convert directly to float32 to preserve precision
         img_float = img_copy.astype(np.float32)
-        # Scale later, not in the beginning
-        max_val = 65535.0
-    else:
-        # Convert to float normalize 0-1 for 8-bit
-        img_float = img_as_float(img_copy)
-        max_val = 1.0
-    
-    # Flatten the image if it's multichannel
-    if len(img_float.shape) > 2:
-        img_flat = img_float.reshape(-1, img_float.shape[2])
-    else:
-        img_flat = img_float.flatten()
         
-    # Calculate percentiles for clipping - Fiji's auto method
-    # uses 0.5% clipping by default (0.25% on each side)
-    low_percentile = clip_percent / 2.0
-    high_percentile = 100 - (clip_percent / 2.0)
-    
-    # Find the min and max values for contrast stretching
-    if len(img_float.shape) > 2:  # Color image
-        enhanced = np.zeros_like(img_float)
-        for i in range(img_float.shape[2]):
-            channel = img_float[..., i]
-            if np.min(channel) != np.max(channel):  # Avoid division by zero
-                # Get histogram limits
-                p_low = np.percentile(channel, low_percentile)
-                p_high = np.percentile(channel, high_percentile)
-                # Fiji-like auto contrast always uses the full output range
-                enhanced_channel = exposure.rescale_intensity(
-                    channel, 
-                    in_range=(p_low, p_high), 
-                    out_range=(0, max_val)
-                )
-                enhanced[..., i] = enhanced_channel
-            else:
-                enhanced[..., i] = channel
-    else:  # Grayscale image
-        if np.min(img_float) != np.max(img_float):  # Avoid division by zero
-            # Get histogram limits
-            p_low = np.percentile(img_float, low_percentile)
-            p_high = np.percentile(img_float, high_percentile)
-            # Fiji-like auto contrast always uses the full output range
-            enhanced = exposure.rescale_intensity(
-                img_float, 
-                in_range=(p_low, p_high), 
-                out_range=(0, max_val)
-            )
-        else:
-            enhanced = img_float
+        # Determine actual bit depth from data (some 16-bit images only use 12 bits)
+        max_possible = 65535.0
+        actual_max = np.max(img_float)
+        actual_range = max(actual_max, 1.0)  # Avoid div by zero
+        
+        # Calculate percentiles for contrast enhancement
+        low_percentile = clip_percent / 2.0
+        high_percentile = 100 - (clip_percent / 2.0)
+        
+        # Determine limits based on histogram
+        p_low = np.percentile(img_float, low_percentile)
+        p_high = np.percentile(img_float, high_percentile)
+        
+        # Apply contrast stretching
+        enhanced = exposure.rescale_intensity(
+            img_float, 
+            in_range=(p_low, p_high), 
+            out_range=(0, 255)  # Always output in 8-bit range for display
+        )
+        
+        # Apply gamma correction if needed
+        if gamma != 1.0:
+            # Normalize to 0-1 for gamma
+            enhanced_norm = enhanced / 255.0
+            enhanced = np.power(enhanced_norm, gamma) * 255.0
             
-    # Apply gamma correction if needed
-    if gamma != 1.0:
-        # Normalize to 0-1 range for gamma correction
-        if max_val > 1.0:
-            enhanced_norm = enhanced / max_val
-            enhanced_gamma = np.power(enhanced_norm, gamma)
-            enhanced = enhanced_gamma * max_val
-        else:
-            enhanced = np.power(enhanced, gamma)
-    
-    # Convert back to original data type with proper scaling
-    if image.dtype == np.uint8:
-        if max_val > 1.0:
-            return np.clip(enhanced / 256.0, 0, 255).astype(np.uint8)
-        else:
-            return img_as_ubyte(enhanced)
-    elif image.dtype == np.uint16:
-        return np.clip(enhanced, 0, 65535).astype(np.uint16)
+        # Return as uint8 for display
+        return np.clip(enhanced, 0, 255).astype(np.uint8)
+        
     else:
-        # For float types, ensure the output range is appropriate
-        if max_val > 1.0 and enhanced.max() > 1.0:
-            return enhanced / max_val
-        return enhanced
+        # For 8-bit images or others
+        if img_copy.dtype != np.float32 and img_copy.dtype != np.float64:
+            # Convert to float for processing
+            img_float = img_as_float(img_copy)
+        else:
+            img_float = img_copy.copy()
+            
+        # Calculate percentiles
+        low_percentile = clip_percent / 2.0
+        high_percentile = 100 - (clip_percent / 2.0)
+        
+        if len(img_float.shape) > 2:  # Color image
+            enhanced = np.zeros_like(img_float)
+            for i in range(img_float.shape[2]):
+                channel = img_float[..., i]
+                if np.min(channel) != np.max(channel):  # Avoid division by zero
+                    # Get histogram limits
+                    p_low = np.percentile(channel, low_percentile)
+                    p_high = np.percentile(channel, high_percentile)
+                    # Fiji-like auto contrast
+                    enhanced_channel = exposure.rescale_intensity(
+                        channel, 
+                        in_range=(p_low, p_high), 
+                        out_range=(0, 1.0)
+                    )
+                    enhanced[..., i] = enhanced_channel
+                else:
+                    enhanced[..., i] = channel
+        else:  # Grayscale image
+            if np.min(img_float) != np.max(img_float):  # Avoid division by zero
+                # Get histogram limits
+                p_low = np.percentile(img_float, low_percentile)
+                p_high = np.percentile(img_float, high_percentile)
+                # Fiji-like auto contrast
+                enhanced = exposure.rescale_intensity(
+                    img_float, 
+                    in_range=(p_low, p_high), 
+                    out_range=(0, 1.0)
+                )
+            else:
+                enhanced = img_float
+                
+        # Apply gamma correction
+        if gamma != 1.0:
+            enhanced = np.power(enhanced, gamma)
+        
+        # Convert to 8-bit for display
+        return img_as_ubyte(enhanced)
 
 def measure_cell_properties(image, mask, cell_id):
     """

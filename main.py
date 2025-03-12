@@ -123,17 +123,14 @@ with col1:
             original_image.seek(0)
             image_array = tifffile.imread(original_image)
             
-            # Display with proper normalization for 16-bit images
-            if image_array.dtype == np.uint16:
-                display_img = (image_array / 65535 * 255).astype(np.uint8)
-            else:
-                display_img = image_array.astype(np.uint8)
-                
+            # Apply auto-contrast for better visualization (Fiji-like)
+            auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+            
             # Ensure the image is in a displayable format
-            if len(display_img.shape) == 2:  # grayscale
-                st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
+            if len(auto_contrast_img.shape) == 2:  # grayscale
+                st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
             else:  # RGB or other
-                st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
+                st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
                 
             # Ensure grayscale for processing
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
@@ -141,20 +138,19 @@ with col1:
         else:
             # Standard handling for other image formats
             image = Image.open(original_image)
-            # Convert to RGB mode for display
-            if image.mode in ['RGBA', 'LA', 'P', 'I', 'I;16']:
-                display_img = image.convert('RGB')
-            else:
-                display_img = image
-                
-            st.image(display_img, caption="Original Phase Contrast Image", use_container_width=True)
-            
             # Convert to numpy array for processing
             image_array = np.array(image)
             
             # Handle grayscale vs color images
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                # Save color image for processing if needed
+                color_image = image_array.copy()
+                # Convert to grayscale for analysis
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+            
+            # Apply auto-contrast for better visualization
+            auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+            st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
 
 with col2:
     st.subheader("Segmentation Mask")
@@ -221,57 +217,24 @@ with col2:
 # Analyze button
 analyze_button = st.button("Analyze Cell Division")
 
-# Preview preprocessing when both images are uploaded
+# Process image for analysis in the background when both images are uploaded
 if original_image is not None and mask_image is not None:
-    # Automatically show preprocessing preview
-    st.subheader("Image Processing Preview")
-    
-    with st.spinner("Generating preview..."):
-        try:
-            # Store in session state for persistence
-            if 'processed_image' not in st.session_state or preprocessing_method != st.session_state.last_preprocessing_method:
-                # Generate preprocessing preview using the selected method
-                processed_image = preprocess_image(image_array, method=preprocessing_method)
-                
-                # Apply auto-contrast to the original image for better visualization
-                auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
-                
-                # Store in session state
-                st.session_state.processed_image = processed_image
-                st.session_state.auto_contrast_image = auto_contrast_image
-                st.session_state.last_preprocessing_method = preprocessing_method
-            else:
-                # Use cached results
-                processed_image = st.session_state.processed_image
-                auto_contrast_image = st.session_state.auto_contrast_image
-            
-            # Display original, auto-contrast, and processed images side by side
-            preview_col1, preview_col2, preview_col3 = st.columns(3)
-            
-            with preview_col1:
-                st.subheader("Original")
-                # Ensure the original image is properly displayed
-                display_original = image_array.copy()
-                if display_original.dtype != np.uint8:
-                    if display_original.max() > 1.0:
-                        display_original = np.clip(display_original, 0, 255).astype(np.uint8)
-                    else:
-                        display_original = np.clip(display_original * 255, 0, 255).astype(np.uint8)
-                st.image(display_original, caption="Original Image", use_container_width=True, clamp=True)
-            
-            with preview_col2:
-                st.subheader("Auto-Contrast")
-                # Display auto-contrast enhanced image
-                st.image(auto_contrast_image, caption="Auto-Contrast Image", use_container_width=True, clamp=True)
-            
-            with preview_col3:
-                st.subheader(f"Processed ({preprocessing_method})")
-                # Display processed image
-                st.image(processed_image, caption="Processed Image", use_container_width=True, clamp=True)
-                
-            st.markdown("---")
-        except Exception as e:
-            st.error(f"Error generating preview: {str(e)}")
+    # Silently process images for analysis
+    if 'processed_image' not in st.session_state or preprocessing_method != st.session_state.last_preprocessing_method:
+        # Generate preprocessing using the selected method
+        processed_image = preprocess_image(image_array, method=preprocessing_method)
+        
+        # Apply auto-contrast to the original image for better visualization
+        auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
+        
+        # Store in session state
+        st.session_state.processed_image = processed_image
+        st.session_state.auto_contrast_image = auto_contrast_image
+        st.session_state.last_preprocessing_method = preprocessing_method
+    else:
+        # Use cached results
+        processed_image = st.session_state.processed_image
+        auto_contrast_image = st.session_state.auto_contrast_image
 
 # Process images when both are uploaded and button is clicked
 if original_image is not None and mask_image is not None and (analyze_button or st.session_state.analyzed):
