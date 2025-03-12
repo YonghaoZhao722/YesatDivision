@@ -778,6 +778,7 @@ dependencies = [
     { name = "scikit-image" },
     { name = "scipy" },
     { name = "streamlit" },
+    { name = "tifffile" },
 ]
 
 [package.metadata]
@@ -790,6 +791,7 @@ requires-dist = [
     { name = "scikit-image", specifier = ">=0.25.2" },
     { name = "scipy", specifier = ">=1.15.2" },
     { name = "streamlit", specifier = ">=1.43.2" },
+    { name = "tifffile", specifier = ">=2025.2.18" },
 ]
 
 [[package]]

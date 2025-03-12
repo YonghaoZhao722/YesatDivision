@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import io
 import os
+import tifffile
 from cell_analysis import CellDivisionAnalyzer
 from utils import preprocess_image, create_visualization, format_results
 
@@ -65,30 +66,86 @@ with col1:
     original_image = st.file_uploader("Upload phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
     
     if original_image is not None:
-        image = Image.open(original_image)
-        # Convert to RGB mode to ensure JPEG compatibility
-        if image.mode in ['RGBA', 'LA', 'P', 'I;16']:
-            image = image.convert('RGB')
-        st.image(image, caption="Original Phase Contrast Image", use_container_width=True)
-        # Convert to numpy array for processing
-        image_array = np.array(image)
+        # Check file extension
+        file_ext = original_image.name.split('.')[-1].lower()
         
-        # Handle grayscale vs color images
-        if len(image_array.shape) == 3 and image_array.shape[2] > 1:
-            image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+        # Specialized handling for TIF/TIFF files
+        if file_ext in ['tif', 'tiff']:
+            # Use tifffile for 16-bit TIFF images
+            original_image.seek(0)
+            image_array = tifffile.imread(original_image)
+            
+            # Display with proper normalization for 16-bit images
+            if image_array.dtype == np.uint16:
+                display_img = (image_array / 65535 * 255).astype(np.uint8)
+            else:
+                display_img = image_array.astype(np.uint8)
+                
+            # Ensure the image is in a displayable format
+            if len(display_img.shape) == 2:  # grayscale
+                st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+            else:  # RGB or other
+                st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+                
+            # Ensure grayscale for processing
+            if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+        else:
+            # Standard handling for other image formats
+            image = Image.open(original_image)
+            # Convert to RGB mode for display
+            if image.mode in ['RGBA', 'LA', 'P', 'I', 'I;16']:
+                display_img = image.convert('RGB')
+            else:
+                display_img = image
+                
+            st.image(display_img, caption="Original Phase Contrast Image", use_column_width=True)
+            
+            # Convert to numpy array for processing
+            image_array = np.array(image)
+            
+            # Handle grayscale vs color images
+            if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
 
 with col2:
     st.subheader("Segmentation Mask")
     mask_image = st.file_uploader("Upload segmentation mask", type=["jpg", "jpeg", "png", "tif", "tiff"])
     
     if mask_image is not None:
-        mask = Image.open(mask_image)
-        # Convert to RGB mode to ensure compatibility
-        if mask.mode in ['RGBA', 'LA', 'P', 'I;16']:
-            mask = mask.convert('RGB')
-        st.image(mask, caption="Segmentation Mask", use_container_width=True)
-        # Convert to numpy array for processing
-        mask_array = np.array(mask)
+        # Check file extension
+        file_ext = mask_image.name.split('.')[-1].lower()
+        
+        # Specialized handling for TIF/TIFF files
+        if file_ext in ['tif', 'tiff']:
+            # Use tifffile for 16-bit TIFF images
+            mask_image.seek(0)
+            mask_array = tifffile.imread(mask_image)
+            
+            # Display with proper normalization for 16-bit images
+            if mask_array.dtype == np.uint16:
+                display_mask = (mask_array / 65535 * 255).astype(np.uint8)
+            else:
+                display_mask = mask_array.astype(np.uint8)
+                
+            # Ensure the image is in a displayable format
+            if len(display_mask.shape) == 2:  # grayscale
+                st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+            else:  # RGB or other
+                st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+        else:
+            # Standard handling for other image formats
+            mask = Image.open(mask_image)
+            # Convert to RGB mode for display
+            if mask.mode in ['RGBA', 'LA', 'P', 'I', 'I;16']:
+                display_mask = mask.convert('RGB')
+            else:
+                display_mask = mask
+                
+            st.image(display_mask, caption="Segmentation Mask", use_column_width=True)
+            
+            # Convert to numpy array for processing
+            mask_array = np.array(mask)
         
         # Ensure mask is binary
         if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
