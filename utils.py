@@ -61,6 +61,9 @@ def preprocess_image(image, method="Basic"):
         # Then contrast enhancement
         processed_image_float = exposure.equalize_adapthist(processed_image_float)
     
+    # Make sure all values are between 0 and 1 before scaling to 255
+    processed_image_float = np.clip(processed_image_float, 0.0, 1.0)
+    
     # Convert back to 0-255 range for return
     processed_image = (processed_image_float * 255).astype(np.uint8)
     

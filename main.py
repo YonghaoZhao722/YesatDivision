@@ -205,14 +205,19 @@ if original_image is not None and mask_image is not None:
                 
                 with preview_col1:
                     st.subheader("Original")
-                    if len(image_array.shape) == 2:  # grayscale
-                        st.image(image_array, caption="Original Image", use_container_width=True)
-                    else:  # RGB
-                        st.image(image_array, caption="Original Image", use_container_width=True)
+                    # Ensure the original image is properly displayed
+                    display_original = image_array.copy()
+                    if display_original.dtype != np.uint8:
+                        if display_original.max() > 1.0:
+                            display_original = np.clip(display_original, 0, 255).astype(np.uint8)
+                        else:
+                            display_original = np.clip(display_original * 255, 0, 255).astype(np.uint8)
+                    st.image(display_original, caption="Original Image", use_container_width=True, clamp=True)
                 
                 with preview_col2:
                     st.subheader(f"Processed ({preprocessing_method})")
-                    st.image(processed_image, caption="Processed Image", use_container_width=True)
+                    # Ensure the processed image is properly displayed
+                    st.image(processed_image, caption="Processed Image", use_container_width=True, clamp=True)
                     
                 st.markdown("---")
             except Exception as e:
