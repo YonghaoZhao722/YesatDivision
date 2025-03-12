@@ -316,7 +316,7 @@ class CellDivisionAnalyzer:
             'correlation': correlation
         }
         
-    def analyze_with_ml(self, image, mask, confidence_threshold=0.3):
+    def analyze_with_ml(self, image, mask, confidence_threshold=0.3, apply_watershed=True):
         """
         Analyze the image and mask to detect cell division events using machine learning features.
         
@@ -328,6 +328,8 @@ class CellDivisionAnalyzer:
             Binary segmentation mask of the cells
         confidence_threshold : float
             Minimum confidence score to consider a cell division event valid
+        apply_watershed : bool
+            Whether to apply watershed segmentation
             
         Returns:
         --------
@@ -339,41 +341,45 @@ class CellDivisionAnalyzer:
         # Make sure the mask is binary
         mask_binary = (mask > 0).astype(np.uint8) * 255
         
-        # Apply watershed segmentation to better separate touching cells
-        # First find sure background
-        sure_bg = cv2.dilate(mask_binary, np.ones((3,3), np.uint8), iterations=1)
-        
-        # Finding sure foreground area using distance transform
-        dist_transform = cv2.distanceTransform(mask_binary, cv2.DIST_L2, 5)
-        _, sure_fg = cv2.threshold(dist_transform, 0.5*dist_transform.max(), 255, 0)
-        sure_fg = sure_fg.astype(np.uint8)
-        
-        # Finding unknown region
-        unknown = cv2.subtract(sure_bg, sure_fg)
-        
-        # Label the foreground objects
-        _, markers = cv2.connectedComponents(sure_fg)
-        
-        # Add one to all labels so that background is 1 instead of 0
-        markers = markers + 1
-        
-        # Mark the unknown region with 0
-        markers[unknown == 255] = 0
-        
-        # Apply watershed
-        if len(image.shape) == 2:
-            # Convert to 3-channel for watershed
-            image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-        else:
-            image_color = image.copy()
+        if apply_watershed:
+            # Apply watershed segmentation to better separate touching cells
+            # First find sure background
+            sure_bg = cv2.dilate(mask_binary, np.ones((3,3), np.uint8), iterations=1)
             
-        # Apply watershed
-        cv2.watershed(image_color, markers)
-        
-        # Use the watershed result as our labeled cells
-        labeled_cells = markers.copy()
-        labeled_cells[labeled_cells == 1] = 0  # Remove background
-        labeled_cells[labeled_cells == -1] = 0  # Remove watershed boundaries
+            # Finding sure foreground area using distance transform
+            dist_transform = cv2.distanceTransform(mask_binary, cv2.DIST_L2, 5)
+            _, sure_fg = cv2.threshold(dist_transform, 0.5*dist_transform.max(), 255, 0)
+            sure_fg = sure_fg.astype(np.uint8)
+            
+            # Finding unknown region
+            unknown = cv2.subtract(sure_bg, sure_fg)
+            
+            # Label the foreground objects
+            _, markers = cv2.connectedComponents(sure_fg)
+            
+            # Add one to all labels so that background is 1 instead of 0
+            markers = markers + 1
+            
+            # Mark the unknown region with 0
+            markers[unknown == 255] = 0
+            
+            # Apply watershed
+            if len(image.shape) == 2:
+                # Convert to 3-channel for watershed
+                image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+            else:
+                image_color = image.copy()
+                
+            # Apply watershed
+            cv2.watershed(image_color, markers)
+            
+            # Use the watershed result as our labeled cells
+            labeled_cells = markers.copy()
+            labeled_cells[labeled_cells == 1] = 0  # Remove background
+            labeled_cells[labeled_cells == -1] = 0  # Remove watershed boundaries
+        else:
+            # Skip watershed and simply label the connected components
+            labeled_cells, _ = label(mask_binary > 0)
         
         # Count number of cells
         num_cells = np.max(labeled_cells)

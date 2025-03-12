@@ -95,6 +95,26 @@ preprocessing_method = st.sidebar.selectbox(
     index=0
 )
 
+# Add segmentation options
+st.sidebar.markdown("### Segmentation Options")
+apply_watershed = st.sidebar.checkbox(
+    "Apply Watershed Segmentation", 
+    value=True,
+    help="Use watershed algorithm to separate touching cells"
+)
+
+apply_thresholding = st.sidebar.checkbox(
+    "Apply Binary Thresholding", 
+    value=True,
+    help="Convert mask to binary (0 or 255)"
+)
+
+apply_morphology = st.sidebar.checkbox(
+    "Apply Morphological Operations", 
+    value=True,
+    help="Apply closing operation to clean up mask"
+)
+
 cell_detection_method = st.sidebar.selectbox(
     "Cell Division Detection Method",
     options=["Distance-Based", "Feature-Based (ML)"],
@@ -231,12 +251,14 @@ with col2:
                 # For other types, just convert
                 mask_array = mask_array.astype(np.uint8)
                 
-        # Make sure the mask is binary (0 or 255)
-        _, mask_array = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
+        # Apply binary thresholding if selected
+        if apply_thresholding:
+            _, mask_array = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
         
-        # Optional: Apply morphological operations to ensure clean mask
-        kernel = np.ones((3,3), np.uint8)
-        mask_array = cv2.morphologyEx(mask_array, cv2.MORPH_CLOSE, kernel)
+        # Apply morphological operations if selected
+        if apply_morphology:
+            kernel = np.ones((3,3), np.uint8)
+            mask_array = cv2.morphologyEx(mask_array, cv2.MORPH_CLOSE, kernel)
 
 # Analyze button
 analyze_button = st.button("Analyze Cell Division")
@@ -320,7 +342,8 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                     division_events, labeled_cells = analyzer.analyze_with_ml(
                         processed_image, 
                         mask_array, 
-                        confidence_threshold=confidence_threshold
+                        confidence_threshold=confidence_threshold,
+                        apply_watershed=apply_watershed
                     )
                 
                 # Save to session state for persistence
