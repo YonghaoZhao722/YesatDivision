@@ -136,28 +136,33 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
         mother = event['mother_cell']
         daughter = event['daughter_cell']
         
-        # Draw centers of cells - ensure integer values for coordinates
-        mother_center = (int(mother['center'][0]), int(mother['center'][1]))
-        daughter_center = (int(daughter['center'][0]), int(daughter['center'][1]))
-        
-        # Draw a line connecting the cells
-        cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 2)
-        
-        # Draw circles for mother (red) and daughter (green) cells
-        cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 2)  # Red for mother
-        cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 2)  # Green for daughter
-        
-        # Add labels
-        cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-        cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Add confidence score
-        confidence_pos = ((mother_center[0] + daughter_center[0]) // 2,
-                          (mother_center[1] + daughter_center[1]) // 2 - 15)
-        cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        try:
+            # Draw centers of cells - ensure integer values for coordinates
+            mother_center = (int(round(mother['center'][0])), int(round(mother['center'][1])))
+            daughter_center = (int(round(daughter['center'][0])), int(round(daughter['center'][1])))
+            
+            # Draw a line connecting the cells
+            cv2.line(vis_image, mother_center, daughter_center, (255, 255, 0), 2)
+            
+            # Draw circles for mother (red) and daughter (green) cells
+            cv2.circle(vis_image, mother_center, 10, (255, 0, 0), 2)  # Red for mother
+            cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 2)  # Green for daughter
+            
+            # Add labels
+            cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            cv2.putText(vis_image, "D", (daughter_center[0] + 15, daughter_center[1]), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            # Add confidence score
+            confidence_pos = (int((mother_center[0] + daughter_center[0]) // 2),
+                              int((mother_center[1] + daughter_center[1]) // 2 - 15))
+            cv2.putText(vis_image, f"{event['confidence']:.2f}", confidence_pos, 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        except Exception as e:
+            # If there's an error with a specific event, log it but continue with other events
+            print(f"Error drawing event: {e}")
+            continue
     
     return vis_image
 
