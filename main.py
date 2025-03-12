@@ -27,6 +27,22 @@ if 'visualization' not in st.session_state:
     st.session_state.visualization = None
 if 'processed_image' not in st.session_state:
     st.session_state.processed_image = None
+if 'auto_contrast_image' not in st.session_state:
+    st.session_state.auto_contrast_image = None
+
+# Initialize parameters to track changes
+if 'last_preprocessing_method' not in st.session_state:
+    st.session_state.last_preprocessing_method = None
+if 'last_distance_threshold' not in st.session_state:
+    st.session_state.last_distance_threshold = None
+if 'last_size_ratio_threshold' not in st.session_state:
+    st.session_state.last_size_ratio_threshold = None
+if 'last_min_cell_size' not in st.session_state:
+    st.session_state.last_min_cell_size = None
+if 'last_cell_detection_method' not in st.session_state:
+    st.session_state.last_cell_detection_method = None
+if 'last_confidence_threshold' not in st.session_state:
+    st.session_state.last_confidence_threshold = None
 
 # App title and description
 st.title("Yeast Cell Division Analyzer")
@@ -207,100 +223,147 @@ analyze_button = st.button("Analyze Cell Division")
 
 # Preview preprocessing when both images are uploaded
 if original_image is not None and mask_image is not None:
-    # Add a checkbox to toggle preprocessing preview
-    show_preprocessing = st.checkbox("Show preprocessing preview", value=False)
+    # Automatically show preprocessing preview
+    st.subheader("Image Processing Preview")
     
-    if show_preprocessing:
-        with st.spinner("Generating preview..."):
-            try:
-                # Generate preprocessing preview
+    with st.spinner("Generating preview..."):
+        try:
+            # Store in session state for persistence
+            if 'processed_image' not in st.session_state or preprocessing_method != st.session_state.last_preprocessing_method:
+                # Generate preprocessing preview using the selected method
                 processed_image = preprocess_image(image_array, method=preprocessing_method)
                 
-                # Display original and processed images side by side for comparison
-                preview_col1, preview_col2 = st.columns(2)
+                # Apply auto-contrast to the original image for better visualization
+                auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
                 
-                with preview_col1:
-                    st.subheader("Original")
-                    # Ensure the original image is properly displayed
-                    display_original = image_array.copy()
-                    if display_original.dtype != np.uint8:
-                        if display_original.max() > 1.0:
-                            display_original = np.clip(display_original, 0, 255).astype(np.uint8)
-                        else:
-                            display_original = np.clip(display_original * 255, 0, 255).astype(np.uint8)
-                    st.image(display_original, caption="Original Image", use_container_width=True, clamp=True)
+                # Store in session state
+                st.session_state.processed_image = processed_image
+                st.session_state.auto_contrast_image = auto_contrast_image
+                st.session_state.last_preprocessing_method = preprocessing_method
+            else:
+                # Use cached results
+                processed_image = st.session_state.processed_image
+                auto_contrast_image = st.session_state.auto_contrast_image
+            
+            # Display original, auto-contrast, and processed images side by side
+            preview_col1, preview_col2, preview_col3 = st.columns(3)
+            
+            with preview_col1:
+                st.subheader("Original")
+                # Ensure the original image is properly displayed
+                display_original = image_array.copy()
+                if display_original.dtype != np.uint8:
+                    if display_original.max() > 1.0:
+                        display_original = np.clip(display_original, 0, 255).astype(np.uint8)
+                    else:
+                        display_original = np.clip(display_original * 255, 0, 255).astype(np.uint8)
+                st.image(display_original, caption="Original Image", use_container_width=True, clamp=True)
+            
+            with preview_col2:
+                st.subheader("Auto-Contrast")
+                # Display auto-contrast enhanced image
+                st.image(auto_contrast_image, caption="Auto-Contrast Image", use_container_width=True, clamp=True)
+            
+            with preview_col3:
+                st.subheader(f"Processed ({preprocessing_method})")
+                # Display processed image
+                st.image(processed_image, caption="Processed Image", use_container_width=True, clamp=True)
                 
-                with preview_col2:
-                    st.subheader(f"Processed ({preprocessing_method})")
-                    # Ensure the processed image is properly displayed
-                    st.image(processed_image, caption="Processed Image", use_container_width=True, clamp=True)
-                    
-                st.markdown("---")
-            except Exception as e:
-                st.error(f"Error generating preview: {str(e)}")
+            st.markdown("---")
+        except Exception as e:
+            st.error(f"Error generating preview: {str(e)}")
 
 # Process images when both are uploaded and button is clicked
-if original_image is not None and mask_image is not None and analyze_button:
-    with st.spinner("Analyzing cell division events..."):
-        try:
-            # Preprocess images
-            processed_image = preprocess_image(image_array, method=preprocessing_method)
-            
-            # Initialize analyzer with appropriate method
-            analyzer = CellDivisionAnalyzer(
-                distance_threshold=distance_threshold,
-                size_ratio_threshold=size_ratio_threshold,
-                min_cell_size=min_cell_size
-            )
-            
-            # Run analysis based on selected method
-            if cell_detection_method == "Distance-Based":
-                division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
-            else:  # "Feature-Based (ML)"
-                # Use the machine learning method with more features
-                division_events, labeled_cells = analyzer.analyze_with_ml(
-                    processed_image, 
-                    mask_array, 
-                    confidence_threshold=confidence_threshold
-                )
-            
-            # Display results
-            st.subheader("Results")
-            
-            if len(division_events) > 0:
-                st.success(f"Found {len(division_events)} potential cell division events")
+if original_image is not None and mask_image is not None and (analyze_button or st.session_state.analyzed):
+    # If analyzing for the first time or parameters changed, rerun the analysis
+    if (analyze_button or 
+        not st.session_state.analyzed or 
+        st.session_state.last_distance_threshold != distance_threshold or
+        st.session_state.last_size_ratio_threshold != size_ratio_threshold or
+        st.session_state.last_min_cell_size != min_cell_size or
+        st.session_state.last_preprocessing_method != preprocessing_method or
+        st.session_state.last_cell_detection_method != cell_detection_method or
+        st.session_state.last_confidence_threshold != confidence_threshold):
+        
+        with st.spinner("Analyzing cell division events..."):
+            try:
+                # Use existing processed image if available, otherwise generate it
+                if 'processed_image' in st.session_state:
+                    processed_image = st.session_state.processed_image
+                else:
+                    processed_image = preprocess_image(image_array, method=preprocessing_method)
                 
-                # Create visualization
+                # Initialize analyzer with appropriate method
+                analyzer = CellDivisionAnalyzer(
+                    distance_threshold=distance_threshold,
+                    size_ratio_threshold=size_ratio_threshold,
+                    min_cell_size=min_cell_size
+                )
+                
+                # Run analysis based on selected method
+                if cell_detection_method == "Distance-Based":
+                    division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
+                else:  # "Feature-Based (ML)"
+                    # Use the machine learning method with more features
+                    division_events, labeled_cells = analyzer.analyze_with_ml(
+                        processed_image, 
+                        mask_array, 
+                        confidence_threshold=confidence_threshold
+                    )
+                
+                # Save to session state for persistence
+                st.session_state.analyzed = True
+                st.session_state.division_events = division_events
+                st.session_state.labeled_cells = labeled_cells
+                
+                # Create visualization with auto-contrast original image for better visibility
+                auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
                 visualization = create_visualization(
-                    original_image=image_array,
+                    original_image=auto_contrast_image,  # Use auto-contrast for visualization
                     mask=mask_array, 
                     division_events=division_events,
                     labeled_cells=labeled_cells
                 )
+                st.session_state.visualization = visualization
                 
-                st.image(visualization, caption="Cell Division Events", use_container_width=True)
+                # Save current parameters to detect changes
+                st.session_state.last_distance_threshold = distance_threshold
+                st.session_state.last_size_ratio_threshold = size_ratio_threshold
+                st.session_state.last_min_cell_size = min_cell_size
+                st.session_state.last_preprocessing_method = preprocessing_method
+                st.session_state.last_cell_detection_method = cell_detection_method
+                st.session_state.last_confidence_threshold = confidence_threshold
                 
-                # Display detailed results
-                st.subheader("Detailed Analysis")
-                formatted_results = format_results(division_events, labeled_cells)
-                st.table(formatted_results)
-                
-                # Download option for the visualization
-                buf = io.BytesIO()
-                plt.imsave(buf, visualization)
-                buf.seek(0)
-                
-                st.download_button(
-                    label="Download Visualization",
-                    data=buf,
-                    file_name="cell_division_analysis.png",
-                    mime="image/png"
-                )
-            else:
-                st.info("No cell division events detected with current parameters. Try adjusting the threshold values.")
+            except Exception as e:
+                st.error(f"Error during analysis: {str(e)}")
+    
+    # Display results from session state
+    st.subheader("Results")
+    
+    if len(st.session_state.division_events) > 0:
+        st.success(f"Found {len(st.session_state.division_events)} potential cell division events")
         
-        except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
+        # Display visualization from session state
+        st.image(st.session_state.visualization, caption="Cell Division Events", use_container_width=True)
+        
+        # Display detailed results
+        st.subheader("Detailed Analysis")
+        formatted_results = format_results(st.session_state.division_events, st.session_state.labeled_cells)
+        st.table(formatted_results)
+        
+        # Download option for the visualization
+        buf = io.BytesIO()
+        plt.imsave(buf, st.session_state.visualization)
+        buf.seek(0)
+        
+        st.download_button(
+            label="Download Visualization",
+            data=buf,
+            file_name="cell_division_analysis.png",
+            mime="image/png"
+        )
+    else:
+        st.info("No cell division events detected with current parameters. Try adjusting the threshold values.")
 
 # Instructions and information section
 with st.expander("How to use this application"):
