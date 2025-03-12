@@ -458,40 +458,38 @@ class CellDivisionAnalyzer:
         confidence : float
             Confidence score between 0 and 1
         """
-        # Distance factor: lower distance = higher confidence
-        distance_factor = max(0, 1 - distance / (self.distance_threshold * 1.5))
+        # Distance factor: lower distance = higher confidence (more permissive)
+        distance_factor = max(0, 1 - distance / (self.distance_threshold * 2.0))
         
-        # Size ratio factor: daughter should be smaller than mother but not too small
-        # Ideal daughter/mother ratio is around 0.3-0.5 for yeast
-        ideal_ratio = 0.4
-        size_ratio_factor = max(0, 1 - abs(size_ratio - ideal_ratio) / 0.4)
+        # Size ratio factor: broader acceptable range for mother/daughter ratio
+        ideal_ratio = 0.5  # Increased from 0.4
+        size_ratio_factor = max(0, 1 - abs(size_ratio - ideal_ratio) / 0.5)  # More permissive
         
         # Touch area factor: daughter cells often remain in contact with mother
-        # Normalize by the perimeter of the smaller cell
+        # Normalize by the perimeter of the smaller cell (more permissive)
         smaller_perimeter = min(mother_cell['perimeter'], daughter_cell['perimeter'])
-        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.25)) if smaller_perimeter > 0 else 0
+        touch_factor = min(1.0, touch_area / (smaller_perimeter * 0.2)) if smaller_perimeter > 0 else 0.5  # Default to 0.5 if no perimeter
         
-        # Shape difference factor: daughter cells often have different shape than mothers
-        # But the difference shouldn't be too extreme
-        shape_factor = min(1.0, roundness_diff * 2.0) if roundness_diff < 0.5 else max(0, 2.0 - roundness_diff * 2.0)
+        # Shape difference factor: more permissive on shape differences
+        shape_factor = min(1.0, roundness_diff * 3.0) if roundness_diff < 0.5 else max(0.3, 2.0 - roundness_diff * 2.0)
         
-        # Intensity factor: daughter cells often have different intensity than mothers
-        intensity_factor = min(1.0, intensity_diff / 30.0)
+        # Intensity factor: more permissive
+        intensity_factor = min(1.0, intensity_diff / 20.0) + 0.2  # Add base confidence
         
-        # Texture factor: texture differences are common in mother-daughter pairs
-        texture_factor = min(1.0, texture_diff * 5.0)
+        # Texture factor: more permissive
+        texture_factor = min(1.0, texture_diff * 7.0) + 0.2  # Add base confidence
         
-        # Eccentricity factor: budding cells often have higher eccentricity
-        eccentricity_factor = min(1.0, eccentricity_diff * 2.0)
+        # Eccentricity factor: more permissive
+        eccentricity_factor = min(1.0, eccentricity_diff * 3.0) + 0.2  # Add base confidence
         
-        # Combine all factors with weights
+        # Combine all factors with weights (slightly adjusted to favor distance and size)
         confidence = (
-            0.25 * distance_factor +
+            0.30 * distance_factor +
             0.25 * size_ratio_factor +
             0.15 * touch_factor +
             0.10 * shape_factor +
-            0.10 * intensity_factor +
-            0.10 * texture_factor +
+            0.07 * intensity_factor +
+            0.08 * texture_factor +
             0.05 * eccentricity_factor
         )
         

@@ -28,8 +28,8 @@ st.sidebar.header("Parameters")
 distance_threshold = st.sidebar.slider(
     "Distance Threshold (pixels)",
     min_value=1,
-    max_value=50,
-    value=15,
+    max_value=100,
+    value=30,
     help="Maximum distance between cells to be considered as potential division"
 )
 
@@ -37,7 +37,7 @@ size_ratio_threshold = st.sidebar.slider(
     "Size Ratio Threshold",
     min_value=0.1,
     max_value=1.0,
-    value=0.7,
+    value=0.5,
     step=0.05,
     help="Mother cells are typically larger than daughter cells (mother/daughter size ratio)"
 )
@@ -61,7 +61,7 @@ preprocessing_method = st.sidebar.selectbox(
 cell_detection_method = st.sidebar.selectbox(
     "Cell Division Detection Method",
     options=["Distance-Based", "Feature-Based (ML)"],
-    index=0,
+    index=1,  # Set ML method as default
     help="Distance-Based: Uses physical proximity and size. Feature-Based: Uses machine learning with multiple cell features."
 )
 
@@ -71,12 +71,12 @@ if cell_detection_method == "Feature-Based (ML)":
         "Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
-        value=0.5,
+        value=0.3,  # Lower threshold to detect more events
         step=0.05,
         help="Minimum confidence score to consider a cell division event valid"
     )
 else:
-    confidence_threshold = 0.5  # Default value for distance-based method
+    confidence_threshold = 0.3  # Lower default value for distance-based method
 
 # Main content area - file upload
 col1, col2 = st.columns(2)
