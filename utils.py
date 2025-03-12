@@ -124,8 +124,8 @@ def create_visualization(original_image, mask, division_events, labeled_cells):
             np.random.randint(100, 255),
             np.random.randint(100, 255)
         ])
-        # Apply color to the overlay - fix indexing issue
-        overlay[cell_mask] = color
+        # Apply color to the overlay - properly handle indexing
+        overlay[cell_mask] = color.reshape(1, 3)
     
     # Add segmentation as semi-transparent overlay
     alpha = 0.35  # Slightly more opaque
