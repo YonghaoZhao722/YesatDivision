@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.xsimd
     pkgs.glibcLocales
     pkgs.qhull
     pkgs.pkg-config
