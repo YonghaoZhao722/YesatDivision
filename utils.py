@@ -110,21 +110,11 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
     # Apply 'plasma' LUT instead of 'hot'
     cmap_mask = plt.colormaps['plasma']
     
-    # First convert binary mask to a more visually interesting representation
-    mask_for_vis = mask.copy()
-    if mask_for_vis.dtype == np.uint8:
-        # Convert to float for better gradient
-        mask_for_vis = mask_for_vis.astype(np.float32) / 255.0
-    
-    # Apply the colormap
-    colored_mask = cmap_mask(mask_for_vis)
-    colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
-    
-    # Create a Fiji-like overlay with distinct colors for each cell
-    # This simulates the "glasbey" LUT in Fiji which assigns distinct colors to labeled objects
-    
     # Create colored overlay image (transparent where no cells exist)
     overlay_img = np.zeros_like(vis_image)
+    
+    # For the overlay, we'll use labeled_cells directly without processing
+    # This prevents cells from being synthesized or disappearing
     
     # Number of unique cell IDs
     num_cells = np.max(labeled_cells) if np.max(labeled_cells) > 0 else 0
@@ -154,32 +144,45 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
         (255, 255, 128), # Light yellow
     ] 
     
-    # Draw colored overlay for each cell
-    for label_id in range(1, num_cells + 1):
-        # Get the mask for this specific cell
-        cell_mask = labeled_cells == label_id
+    # Draw colored overlay for each cell using the original mask
+    # This simply applies a color to the input mask without modifying its structure
+    if np.any(mask):
+        # Just use a binary mask version without any processing
+        binary_mask = mask > 0
         
-        # Skip empty masks
-        if not np.any(cell_mask):
-            continue
-            
-        # Get color from the glasbey color map
-        color_idx = (label_id - 1) % len(glasbey_colors)
-        cell_color = glasbey_colors[color_idx]
-        
-        # Find the cell contour for better edge highlighting
+        # Find contours from the original mask
         contours, _ = cv2.findContours(
-            cell_mask.astype(np.uint8), 
+            binary_mask.astype(np.uint8), 
             cv2.RETR_EXTERNAL, 
             cv2.CHAIN_APPROX_SIMPLE
         )
         
-        # Fill the cell area with color
-        for i in range(3):
-            overlay_img[:, :, i] = np.where(cell_mask, cell_color[i], overlay_img[:, :, i])
-        
-        # Draw a slightly thicker outline around each cell
-        cv2.drawContours(overlay_img, contours, -1, cell_color, 2)
+        # For each cell in the labeled cells
+        for label_id in range(1, num_cells + 1):
+            # Get the mask for this specific cell
+            cell_mask = labeled_cells == label_id
+            
+            # Skip empty masks
+            if not np.any(cell_mask):
+                continue
+                
+            # Get color from the glasbey color map
+            color_idx = (label_id - 1) % len(glasbey_colors)
+            cell_color = glasbey_colors[color_idx]
+            
+            # Fill the cell area with color
+            for i in range(3):
+                overlay_img[:, :, i] = np.where(cell_mask, cell_color[i], overlay_img[:, :, i])
+            
+            # Find the cell contour for better edge highlighting
+            cell_contours, _ = cv2.findContours(
+                cell_mask.astype(np.uint8), 
+                cv2.RETR_EXTERNAL, 
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+            
+            # Draw a slightly thicker outline around each cell
+            cv2.drawContours(overlay_img, cell_contours, -1, cell_color, 2)
     
     # Apply the overlay with user-specified opacity
     vis_image = cv2.addWeighted(overlay_img, overlay_opacity, vis_image, 1.0, 0)

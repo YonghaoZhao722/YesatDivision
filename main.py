@@ -198,16 +198,23 @@ with col2:
             # Apply auto contrast to mask for better visualization
             mask_auto_contrast = auto_contrast(mask_array, clip_percent=0.5)
 
+            # Create a black background version with colored cells
             # Apply a colormap to the mask for better visualization
             # Create a colored version of the mask using matplotlib's 'plasma' colormap
             cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
-            colored_mask = cmap(mask_auto_contrast)
+            
+            # Create a black background
+            colored_mask = np.zeros((mask_array.shape[0], mask_array.shape[1], 4), dtype=np.float32)
+            
+            # Only color the cells (non-zero pixels)
+            mask_nonzero = mask_auto_contrast > 0
+            colored_mask[mask_nonzero] = cmap(mask_auto_contrast[mask_nonzero])
+            
+            # Convert to uint8 for display (only RGB channels)
+            colored_mask_rgb = (colored_mask[:, :, :3] * 255).astype(np.uint8)
 
-            # Convert to uint8 for display
-            colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
-
-            # Display the colored mask
-            st.image(colored_mask, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
+            # Display the colored mask with black background
+            st.image(colored_mask_rgb, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
         else:
             # Standard handling for other image formats
             mask = Image.open(mask_image)
@@ -221,16 +228,23 @@ with col2:
             # Apply auto contrast to mask for better visualization
             mask_auto_contrast = auto_contrast(mask_array_temp, clip_percent=0.5)
 
+            # Create a black background version with colored cells
             # Apply a colormap to the mask for better visualization
             # Create a colored version of the mask using matplotlib's 'plasma' colormap
             cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
-            colored_mask = cmap(mask_auto_contrast)
+            
+            # Create a black background
+            colored_mask = np.zeros((mask_array_temp.shape[0], mask_array_temp.shape[1], 4), dtype=np.float32)
+            
+            # Only color the cells (non-zero pixels)
+            mask_nonzero = mask_auto_contrast > 0
+            colored_mask[mask_nonzero] = cmap(mask_auto_contrast[mask_nonzero])
+            
+            # Convert to uint8 for display (only RGB channels)
+            colored_mask_rgb = (colored_mask[:, :, :3] * 255).astype(np.uint8)
 
-            # Convert to uint8 for display
-            colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
-
-            # Display the colored mask
-            st.image(colored_mask, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
+            # Display the colored mask with black background
+            st.image(colored_mask_rgb, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
 
             # Convert to numpy array for processing
             mask_array = np.array(mask)
