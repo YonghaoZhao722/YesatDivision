@@ -106,9 +106,9 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
         else:
             vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
     
-    # Generate a Fiji-like colored version of the mask using a colormap
-    # Apply 'fire' LUT (similar to Fiji)
-    cmap_mask = plt.cm.get_cmap('hot')
+    # Generate a colored version of the mask using a colormap
+    # Apply 'plasma' LUT instead of 'hot'
+    cmap_mask = plt.colormaps['plasma']
     
     # First convert binary mask to a more visually interesting representation
     mask_for_vis = mask.copy()

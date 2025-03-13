@@ -141,26 +141,26 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Original Image")
     original_image = st.file_uploader("Upload phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
-    
+
     if original_image is not None:
         # Check file extension
         file_ext = original_image.name.split('.')[-1].lower()
-        
+
         # Specialized handling for TIF/TIFF files
         if file_ext in ['tif', 'tiff']:
             # Use tifffile for 16-bit TIFF images
             original_image.seek(0)
             image_array = tifffile.imread(original_image)
-            
+
             # Apply auto-contrast for better visualization (Fiji-like)
             auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
-            
+
             # Ensure the image is in a displayable format
             if len(auto_contrast_img.shape) == 2:  # grayscale
                 st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
             else:  # RGB or other
                 st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
-                
+
             # Ensure grayscale for processing
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
@@ -169,14 +169,14 @@ with col1:
             image = Image.open(original_image)
             # Convert to numpy array for processing
             image_array = np.array(image)
-            
+
             # Handle grayscale vs color images
             if len(image_array.shape) == 3 and image_array.shape[2] > 1:
                 # Save color image for processing if needed
                 color_image = image_array.copy()
                 # Convert to grayscale for analysis
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
-            
+
             # Apply auto-contrast for better visualization
             auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
             st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
@@ -184,61 +184,61 @@ with col1:
 with col2:
     st.subheader("Segmentation Mask")
     mask_image = st.file_uploader("Upload segmentation mask", type=["jpg", "jpeg", "png", "tif", "tiff"])
-    
+
     if mask_image is not None:
         # Check file extension
         file_ext = mask_image.name.split('.')[-1].lower()
-        
+
         # Specialized handling for TIF/TIFF files
         if file_ext in ['tif', 'tiff']:
             # Use tifffile for 16-bit TIFF images
             mask_image.seek(0)
             mask_array = tifffile.imread(mask_image)
-            
+
             # Apply auto contrast to mask for better visualization
             mask_auto_contrast = auto_contrast(mask_array, clip_percent=0.5)
-            
-            # Apply a colormap (Fire or Rainbow) to the mask for better visualization
-            # Create a colored version of the mask using matplotlib's 'hot' colormap (similar to Fiji's 'Fire')
-            cmap = plt.cm.get_cmap('hot')  # Similar to Fiji's 'Fire' LUT
+
+            # Apply a colormap to the mask for better visualization
+            # Create a colored version of the mask using matplotlib's 'plasma' colormap
+            cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
             colored_mask = cmap(mask_auto_contrast)
-            
+
             # Convert to uint8 for display
             colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
-            
+
             # Display the colored mask
-            st.image(colored_mask, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
+            st.image(colored_mask, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
         else:
             # Standard handling for other image formats
             mask = Image.open(mask_image)
             # Convert to numpy array for processing
             mask_array_temp = np.array(mask)
-            
+
             # Convert to grayscale if needed
             if len(mask_array_temp.shape) == 3 and mask_array_temp.shape[2] > 1:
                 mask_array_temp = cv2.cvtColor(mask_array_temp, cv2.COLOR_RGB2GRAY)
-                
+
             # Apply auto contrast to mask for better visualization
             mask_auto_contrast = auto_contrast(mask_array_temp, clip_percent=0.5)
-            
-            # Apply a colormap (Fire or Rainbow) to the mask for better visualization
-            # Create a colored version of the mask using matplotlib's 'hot' colormap (similar to Fiji's 'Fire')
-            cmap = plt.cm.get_cmap('hot')  # Similar to Fiji's 'Fire' LUT
+
+            # Apply a colormap to the mask for better visualization
+            # Create a colored version of the mask using matplotlib's 'plasma' colormap
+            cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
             colored_mask = cmap(mask_auto_contrast)
-            
+
             # Convert to uint8 for display
             colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
-            
+
             # Display the colored mask
-            st.image(colored_mask, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
-            
+            st.image(colored_mask, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
+
             # Convert to numpy array for processing
             mask_array = np.array(mask)
-        
+
         # Ensure mask is binary and has the correct data type
         if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
             mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
-            
+
         # Convert to uint8 to ensure compatibility with OpenCV functions
         if mask_array.dtype != np.uint8:
             if mask_array.dtype == np.uint16:
@@ -250,11 +250,11 @@ with col2:
             else:
                 # For other types, just convert
                 mask_array = mask_array.astype(np.uint8)
-                
+
         # Apply binary thresholding if selected
         if apply_thresholding:
             _, mask_array = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
-        
+
         # Apply morphological operations if selected
         if apply_morphology:
             kernel = np.ones((3,3), np.uint8)
@@ -270,18 +270,18 @@ if original_image is not None and mask_image is not None:
         preprocessing_method != st.session_state.last_preprocessing_method or
         'last_overlay_opacity' not in st.session_state or
         st.session_state.last_overlay_opacity != overlay_opacity):
-        
+
         # Generate preprocessing using the selected method
         processed_image = preprocess_image(image_array, method=preprocessing_method)
-        
+
         # Apply auto-contrast to the original image for better visualization
         auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
-        
+
         # Create labeled image (without division markers)
         from skimage.measure import label
         binary_mask = mask_array > 0
         labeled_mask = label(binary_mask)
-        
+
         # Create a Fiji-style overlay of the mask on the original image
         overlay_image = create_visualization(
             original_image=auto_contrast_image,
@@ -290,7 +290,7 @@ if original_image is not None and mask_image is not None:
             labeled_cells=labeled_mask,
             overlay_opacity=overlay_opacity/100.0  # Convert percentage to decimal
         )
-        
+
         # Store in session state
         st.session_state.processed_image = processed_image
         st.session_state.auto_contrast_image = auto_contrast_image
@@ -302,7 +302,7 @@ if original_image is not None and mask_image is not None:
         processed_image = st.session_state.processed_image
         auto_contrast_image = st.session_state.auto_contrast_image
         overlay_image = st.session_state.overlay_image
-        
+
     # Show the overlay of mask on original image
     st.subheader("Segmentation Overlay")
     st.image(st.session_state.overlay_image, caption=f"Overlay with {overlay_opacity}% opacity", use_container_width=True)
@@ -318,7 +318,7 @@ if original_image is not None and mask_image is not None and (analyze_button or 
         st.session_state.last_preprocessing_method != preprocessing_method or
         st.session_state.last_cell_detection_method != cell_detection_method or
         st.session_state.last_confidence_threshold != confidence_threshold):
-        
+
         with st.spinner("Analyzing cell division events..."):
             try:
                 # Use existing processed image if available, otherwise generate it
@@ -326,14 +326,14 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                     processed_image = st.session_state.processed_image
                 else:
                     processed_image = preprocess_image(image_array, method=preprocessing_method)
-                
+
                 # Initialize analyzer with appropriate method
                 analyzer = CellDivisionAnalyzer(
                     distance_threshold=distance_threshold,
                     size_ratio_threshold=size_ratio_threshold,
                     min_cell_size=min_cell_size
                 )
-                
+
                 # Run analysis based on selected method
                 if cell_detection_method == "Distance-Based":
                     division_events, labeled_cells = analyzer.analyze(processed_image, mask_array)
@@ -345,12 +345,12 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                         confidence_threshold=confidence_threshold,
                         apply_watershed=apply_watershed
                     )
-                
+
                 # Save to session state for persistence
                 st.session_state.analyzed = True
                 st.session_state.division_events = division_events
                 st.session_state.labeled_cells = labeled_cells
-                
+
                 # Create visualization with auto-contrast original image for better visibility
                 auto_contrast_image = auto_contrast(image_array, clip_percent=0.5)
                 visualization = create_visualization(
@@ -361,7 +361,7 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                     overlay_opacity=overlay_opacity/100.0  # Convert percentage to decimal
                 )
                 st.session_state.visualization = visualization
-                
+
                 # Save current parameters to detect changes
                 st.session_state.last_distance_threshold = distance_threshold
                 st.session_state.last_size_ratio_threshold = size_ratio_threshold
@@ -369,29 +369,29 @@ if original_image is not None and mask_image is not None and (analyze_button or 
                 st.session_state.last_preprocessing_method = preprocessing_method
                 st.session_state.last_cell_detection_method = cell_detection_method
                 st.session_state.last_confidence_threshold = confidence_threshold
-                
+
             except Exception as e:
                 st.error(f"Error during analysis: {str(e)}")
-    
+
     # Display results from session state
     st.subheader("Results")
-    
+
     if len(st.session_state.division_events) > 0:
         st.success(f"Found {len(st.session_state.division_events)} potential cell division events")
-        
+
         # Display visualization from session state
         st.image(st.session_state.visualization, caption="Cell Division Events", use_container_width=True)
-        
+
         # Display detailed results
         st.subheader("Detailed Analysis")
         formatted_results = format_results(st.session_state.division_events, st.session_state.labeled_cells)
         st.table(formatted_results)
-        
+
         # Download option for the visualization
         buf = io.BytesIO()
         plt.imsave(buf, st.session_state.visualization)
         buf.seek(0)
-        
+
         st.download_button(
             label="Download Visualization",
             data=buf,
@@ -405,7 +405,7 @@ if original_image is not None and mask_image is not None and (analyze_button or 
 with st.expander("How to use this application"):
     st.markdown("""
     ### Instructions:
-    
+
     1. Upload a phase contrast image of yeast cells
     2. Upload the corresponding segmentation mask (binary image with cell regions in white)
     3. Adjust the parameters if necessary:
@@ -414,16 +414,16 @@ with st.expander("How to use this application"):
        - Minimum Cell Size: Filters out small artifacts in the image
     4. Click "Analyze Cell Division" to process the images
     5. Review the results and download the visualization if needed
-    
+
     ### Methodology:
-    
+
     This application offers two detection methods:
-    
+
     #### Distance-Based Method:
     - Cell division events are identified when two cells are within the specified distance threshold
     - Mother and daughter cells are differentiated based on size (mothers are typically larger)
     - Basic confidence score calculated from distance and size ratio
-    
+
     #### Feature-Based (ML) Method:
     - Uses multiple cell features to identify division events (recommended for better accuracy)
     - Analyzes texture patterns, cell wall properties, and shape characteristics
@@ -434,9 +434,9 @@ with st.expander("How to use this application"):
       * Shape characteristics (roundness, eccentricity)
       * Intensity patterns
       * Contact area between cells
-    
+
     ### Tips for better results:
-    
+
     - Ensure the segmentation mask accurately represents cell boundaries
     - Try both detection methods and compare results
     - For Distance-Based method: adjust the distance and size ratio thresholds
