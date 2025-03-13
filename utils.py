@@ -92,45 +92,35 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
     visualization : numpy.ndarray
         Visualization image showing detected division events with Fiji-like overlay
     """
-    # Create a color visualization
-    if len(original_image.shape) == 2:
-        # Convert grayscale to RGB
-        vis_image = cv2.cvtColor(original_image, cv2.COLOR_GRAY2RGB)
-    else:
-        vis_image = original_image.copy()
-    
-    # Make sure image is in the right format for display
-    if vis_image.dtype != np.uint8:
-        if vis_image.max() <= 1.0:
-            vis_image = (vis_image * 255).astype(np.uint8)
-        else:
-            vis_image = np.clip(vis_image, 0, 255).astype(np.uint8)
+    # Create a black background image
+    h, w = original_image.shape[:2]
+    vis_image = np.zeros((h, w, 3), dtype=np.uint8)  # Black background
     
     # Generate a colored version of the mask using a colormap
-    # Apply 'plasma' LUT instead of 'hot'
+    # Apply 'plasma' LUT
     cmap_mask = plt.colormaps['plasma']
     
-    # First convert binary mask to a more visually interesting representation
-    mask_for_vis = mask.copy()
-    if mask_for_vis.dtype == np.uint8:
-        # Convert to float for better gradient
-        mask_for_vis = mask_for_vis.astype(np.float32) / 255.0
+    # For the overlay, we'll use the original mask directly, not the labeled cells
+    # This preserves the original cell boundaries without watershed modifications
+    original_mask = mask.copy()
+    if original_mask.dtype == np.uint8:
+        # Convert to binary
+        original_mask = (original_mask > 0).astype(np.uint8) * 255
     
-    # Apply the colormap
+    # Create a colored mask from the original (this preserves all original cells)
+    mask_for_vis = original_mask.astype(np.float32) / 255.0
     colored_mask = cmap_mask(mask_for_vis)
     colored_mask = (colored_mask[:, :, :3] * 255).astype(np.uint8)
     
-    # Create a Fiji-like overlay with distinct colors for each cell
-    # This simulates the "glasbey" LUT in Fiji which assigns distinct colors to labeled objects
-    
-    # Create colored overlay image (transparent where no cells exist)
+    # Create overlay image with colored cells
     overlay_img = np.zeros_like(vis_image)
     
-    # Number of unique cell IDs
-    num_cells = np.max(labeled_cells) if np.max(labeled_cells) > 0 else 0
+    # Use the processed labeled_cells for identifying unique cells
+    # but use original mask contours for drawing
+    _, orig_binary = cv2.threshold(original_mask, 1, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(orig_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     # Use a Fiji-like glasbey colormap with distinct bright colors
-    # For reproducibility, we'll use a fixed color palette similar to Fiji
     glasbey_colors = [
         (255, 0, 0),     # Red
         (0, 255, 0),     # Green
@@ -152,36 +142,25 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
         (128, 255, 128), # Light green
         (128, 128, 255), # Light blue
         (255, 255, 128), # Light yellow
-    ] 
+    ]
     
-    # Draw colored overlay for each cell
-    for label_id in range(1, num_cells + 1):
-        # Get the mask for this specific cell
-        cell_mask = labeled_cells == label_id
-        
-        # Skip empty masks
-        if not np.any(cell_mask):
-            continue
-            
-        # Get color from the glasbey color map
-        color_idx = (label_id - 1) % len(glasbey_colors)
+    # Draw each contour with a unique color
+    for i, contour in enumerate(contours):
+        color_idx = i % len(glasbey_colors)
         cell_color = glasbey_colors[color_idx]
         
-        # Find the cell contour for better edge highlighting
-        contours, _ = cv2.findContours(
-            cell_mask.astype(np.uint8), 
-            cv2.RETR_EXTERNAL, 
-            cv2.CHAIN_APPROX_SIMPLE
-        )
+        # Create a mask for this contour
+        contour_mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.drawContours(contour_mask, [contour], 0, 255, -1)  # Fill the contour
         
         # Fill the cell area with color
-        for i in range(3):
-            overlay_img[:, :, i] = np.where(cell_mask, cell_color[i], overlay_img[:, :, i])
+        for c in range(3):
+            overlay_img[:, :, c] = np.where(contour_mask > 0, cell_color[c], overlay_img[:, :, c])
         
-        # Draw a slightly thicker outline around each cell
-        cv2.drawContours(overlay_img, contours, -1, cell_color, 2)
+        # Draw a slightly thicker outline
+        cv2.drawContours(overlay_img, [contour], 0, cell_color, 2)
     
-    # Apply the overlay with user-specified opacity
+    # Overlay the colored cells onto the black background
     vis_image = cv2.addWeighted(overlay_img, overlay_opacity, vis_image, 1.0, 0)
     
     # Draw division events with clearer markers
@@ -201,9 +180,6 @@ def create_visualization(original_image, mask, division_events, labeled_cells, o
         cv2.circle(vis_image, daughter_center, 8, (0, 255, 0), 3)  # Green for daughter
         
         # Add labels with better contrast for visibility
-        # Add white background to text for better readability
-        text_size = cv2.getTextSize("M", cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-        
         # Mother cell label
         cv2.putText(vis_image, "M", (mother_center[0] + 15, mother_center[1]), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)  # Black outline
