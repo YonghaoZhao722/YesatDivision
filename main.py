@@ -129,131 +129,276 @@ def app():
     else:
         confidence_threshold = 0.20  # Updated as requested
 
-    # Main content area - file upload
+    # Main content area - file upload with automatic detection
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Original Image")
-        original_image = st.file_uploader("Upload phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
-
-        if original_image is not None:
+        st.subheader("DIC/Phase Contrast Image")
+        dic_image = st.file_uploader("Upload DIC/Phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
+        
+        # Variables to store our image arrays
+        image_array = None
+        mask_array = None
+        
+        if dic_image is not None:
             # Check file extension
-            file_ext = original_image.name.split('.')[-1].lower()
-
+            file_ext = dic_image.name.split('.')[-1].lower()
+            
             # Specialized handling for TIF/TIFF files
             if file_ext in ['tif', 'tiff']:
                 # Use tifffile for 16-bit TIFF images
-                original_image.seek(0)
-                image_array = tifffile.imread(original_image)
-
-                # Apply auto-contrast for better visualization (Fiji-like)
-                auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
-
-                # Ensure the image is in a displayable format
-                if len(auto_contrast_img.shape) == 2:  # grayscale
-                    st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
-                else:  # RGB or other
-                    st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
-
-                # Ensure grayscale for processing
-                if len(image_array.shape) == 3 and image_array.shape[2] > 1:
-                    image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
-            else:
-                # Standard handling for other image formats
-                image = Image.open(original_image)
-                # Convert to numpy array for processing
-                image_array = np.array(image)
-
-                # Handle grayscale vs color images
-                if len(image_array.shape) == 3 and image_array.shape[2] > 1:
-                    # Save color image for processing if needed
-                    color_image = image_array.copy()
-                    # Convert to grayscale for analysis
-                    image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
-
-                # Apply auto-contrast for better visualization
-                auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
-                st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
-
-    with col2:
-        st.subheader("Segmentation Mask")
-        mask_image = st.file_uploader("Upload segmentation mask", type=["jpg", "jpeg", "png", "tif", "tiff"])
-
-        if mask_image is not None:
-            # Check file extension
-            file_ext = mask_image.name.split('.')[-1].lower()
-
-            # Specialized handling for TIF/TIFF files
-            if file_ext in ['tif', 'tiff']:
-                # Use tifffile for 16-bit TIFF images
-                mask_image.seek(0)
-                mask_array = tifffile.imread(mask_image)
+                dic_image.seek(0)
+                img_array = tifffile.imread(dic_image)
                 
                 # Check for metadata to determine if it's a mask
                 is_mask = False
-                metadata = tifffile.TiffFile(mask_image).pages[0].tags
-                if 'ImageDescription' in metadata:
-                    desc = metadata['ImageDescription'].value
-                    if isinstance(desc, bytes):
-                        desc = desc.decode('utf-8', errors='ignore')
-                    if '{"shape":' in desc or '"shape":' in desc:
-                        is_mask = True
-                        st.info("Detected mask image from metadata")
+                try:
+                    metadata = tifffile.TiffFile(dic_image).pages[0].tags
+                    if 'ImageDescription' in metadata:
+                        desc = metadata['ImageDescription'].value
+                        if isinstance(desc, bytes):
+                            desc = desc.decode('utf-8', errors='ignore')
+                        if '{"shape":' in desc or '"shape":' in desc:
+                            is_mask = True
+                            st.info("Detected mask image from metadata!")
+                            mask_array = img_array
+                except Exception as e:
+                    st.warning(f"Could not read metadata: {e}")
                 
-                # Handle different data types for the mask
-                if mask_array.dtype == np.uint32 or mask_array.dtype == np.int32:
-                    # For uint32 or int32 masks, just convert values > 0 to binary
-                    mask_binary = (mask_array > 0).astype(np.uint8) * 255
-                    st.info(f"Converted mask from {mask_array.dtype} to binary")
-                    # Create binary version for processing
-                    mask_array = mask_array > 0
-                elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
-                    # For float masks, threshold at a small value
-                    mask_binary = (mask_array > 0.1).astype(np.uint8) * 255
-                    st.info(f"Converted mask from {mask_array.dtype} to binary")
-                    # Create binary version for processing
-                    mask_array = mask_array > 0.1
+                # Auto-detection based on image properties if metadata doesn't help
+                if not is_mask:
+                    # Check if it looks like a binary/mask image (few unique values)
+                    unique_values = np.unique(img_array)
+                    if len(unique_values) < 10:
+                        st.info("Detected binary mask image based on pixel values!")
+                        mask_array = img_array
+                        is_mask = True
+                    else:
+                        # This is likely a DIC/phase contrast image
+                        image_array = img_array
+                
+                # Process based on detected type
+                if is_mask:
+                    # Handle mask processing
+                    # Handle different data types for the mask
+                    if mask_array.dtype == np.uint32 or mask_array.dtype == np.int32:
+                        # For uint32 or int32 masks, just convert values > 0 to binary
+                        mask_binary = (mask_array > 0).astype(np.uint8) * 255
+                        st.info(f"Converted mask from {mask_array.dtype} to binary")
+                        # Create binary version for processing
+                        mask_array = mask_array > 0
+                    elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
+                        # For float masks, threshold at a small value
+                        mask_binary = (mask_array > 0.1).astype(np.uint8) * 255
+                        st.info(f"Converted mask from {mask_array.dtype} to binary")
+                        # Create binary version for processing
+                        mask_array = mask_array > 0.1
+                    else:
+                        # For uint8, uint16, etc.
+                        mask_threshold = 128 if mask_array.max() > 1 else 0.5
+                        mask_binary = (mask_array > mask_threshold).astype(np.uint8) * 255
+                        # Create binary version for processing
+                        mask_array = mask_array > mask_threshold
+                    
+                    # Apply auto contrast to mask for better visualization
+                    mask_auto_contrast = mask_binary
+                    
+                    # Use our simplified 3-3-2 RGB Fire LUT for visualization
+                    binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
+                    colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
+                    
+                    # Display the colored mask with black background
+                    st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT with 3-3-2 RGB mapping)", use_container_width=True)
                 else:
-                    # For uint8, uint16, etc.
-                    mask_threshold = 128 if mask_array.max() > 1 else 0.5
-                    mask_binary = (mask_array > mask_threshold).astype(np.uint8) * 255
-                    # Create binary version for processing
-                    mask_array = mask_array > mask_threshold
-
-                # Apply auto contrast to mask for better visualization
-                mask_auto_contrast = mask_binary
-
-                # Use our custom Fire LUT for visualization (similar to Fiji's "Fire" LUT)
-                # Apply the new 3-3-2 RGB Fire LUT to the binary mask
-                binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
-                colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
-
-                # Display the colored mask with black background
-                st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
+                    # Process as DIC/phase contrast image
+                    # Apply auto-contrast for better visualization (Fiji-like)
+                    auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+                    
+                    # Ensure the image is in a displayable format
+                    if len(auto_contrast_img.shape) == 2:  # grayscale
+                        st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+                    else:  # RGB or other
+                        st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+                    
+                    # Ensure grayscale for processing
+                    if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
             else:
                 # Standard handling for other image formats
-                mask = Image.open(mask_image)
+                image = Image.open(dic_image)
                 # Convert to numpy array for processing
-                mask_array_temp = np.array(mask)
-
-                # Convert to grayscale if needed
-                if len(mask_array_temp.shape) == 3 and mask_array_temp.shape[2] > 1:
-                    mask_array_temp = cv2.cvtColor(mask_array_temp, cv2.COLOR_RGB2GRAY)
-
-                # Apply auto contrast to mask for better visualization
-                mask_auto_contrast = auto_contrast(mask_array_temp, clip_percent=0.5)
-
-                # Use our custom Fire LUT for visualization
-                binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
-                colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
-
-                # Display the colored mask with black background
-                st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
-
+                img_array = np.array(image)
+                
+                # Automatic detection based on histogram
+                # Check if it looks like a binary mask (few distinct values)
+                if len(np.unique(img_array)) < 10:
+                    st.info("Detected binary mask image based on pixel values!")
+                    mask_array = img_array
+                    
+                    # Process as mask
+                    if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
+                        mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
+                    
+                    # Apply binary threshold to ensure it's a proper mask
+                    _, mask_binary = cv2.threshold(mask_array.astype(np.uint8), 1, 255, cv2.THRESH_BINARY)
+                    
+                    # Use our simplified 3-3-2 RGB Fire LUT for visualization
+                    binary_mask = (mask_binary > 0).astype(np.uint8)
+                    colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
+                    
+                    # Display the colored mask with black background
+                    st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT with 3-3-2 RGB mapping)", use_container_width=True)
+                else:
+                    # Process as DIC/phase contrast image
+                    image_array = img_array
+                    
+                    # Handle grayscale vs color images
+                    if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                        # Save color image for processing if needed
+                        color_image = image_array.copy()
+                        # Convert to grayscale for analysis
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+                    
+                    # Apply auto-contrast for better visualization
+                    auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+                    st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+    
+    with col2:
+        st.subheader("Mask/DIC Upload (Optional)")
+        second_image = st.file_uploader("Upload secondary image (mask or DIC)", type=["jpg", "jpeg", "png", "tif", "tiff"])
+        
+        if second_image is not None:
+            # Check file extension
+            file_ext = second_image.name.split('.')[-1].lower()
+            
+            # Specialized handling for TIF/TIFF files
+            if file_ext in ['tif', 'tiff']:
+                # Use tifffile for 16-bit TIFF images
+                second_image.seek(0)
+                img_array = tifffile.imread(second_image)
+                
+                # Check for metadata to determine if it's a mask
+                is_mask = False
+                try:
+                    metadata = tifffile.TiffFile(second_image).pages[0].tags
+                    if 'ImageDescription' in metadata:
+                        desc = metadata['ImageDescription'].value
+                        if isinstance(desc, bytes):
+                            desc = desc.decode('utf-8', errors='ignore')
+                        if '{"shape":' in desc or '"shape":' in desc:
+                            is_mask = True
+                            st.info("Detected mask image from metadata!")
+                except Exception as e:
+                    st.warning(f"Could not read metadata: {e}")
+                
+                # Auto-detection based on image properties if metadata doesn't help
+                if not is_mask:
+                    # Check if it looks like a binary/mask image (few unique values)
+                    unique_values = np.unique(img_array)
+                    if len(unique_values) < 10:
+                        st.info("Detected binary mask image based on pixel values!")
+                        is_mask = True
+                
+                # Process based on detected type
+                if is_mask:
+                    # Handle mask processing
+                    mask_array = img_array
+                    
+                    # Handle different data types for the mask
+                    if mask_array.dtype == np.uint32 or mask_array.dtype == np.int32:
+                        # For uint32 or int32 masks, just convert values > 0 to binary
+                        mask_binary = (mask_array > 0).astype(np.uint8) * 255
+                        st.info(f"Converted mask from {mask_array.dtype} to binary")
+                        # Create binary version for processing
+                        mask_array = mask_array > 0
+                    elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
+                        # For float masks, threshold at a small value
+                        mask_binary = (mask_array > 0.1).astype(np.uint8) * 255
+                        st.info(f"Converted mask from {mask_array.dtype} to binary")
+                        # Create binary version for processing
+                        mask_array = mask_array > 0.1
+                    else:
+                        # For uint8, uint16, etc.
+                        mask_threshold = 128 if mask_array.max() > 1 else 0.5
+                        mask_binary = (mask_array > mask_threshold).astype(np.uint8) * 255
+                        # Create binary version for processing
+                        mask_array = mask_array > mask_threshold
+                    
+                    # Apply auto contrast to mask for better visualization
+                    mask_auto_contrast = mask_binary
+                    
+                    # Use our simplified 3-3-2 RGB Fire LUT for visualization
+                    binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
+                    colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
+                    
+                    # Display the colored mask with black background
+                    st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT with 3-3-2 RGB mapping)", use_container_width=True)
+                else:
+                    # Process as DIC/phase contrast image
+                    image_array = img_array
+                    
+                    # Apply auto-contrast for better visualization (Fiji-like)
+                    auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+                    
+                    # Ensure the image is in a displayable format
+                    if len(auto_contrast_img.shape) == 2:  # grayscale
+                        st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+                    else:  # RGB or other
+                        st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+                    
+                    # Ensure grayscale for processing
+                    if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+            else:
+                # Standard handling for other image formats
+                image = Image.open(second_image)
                 # Convert to numpy array for processing
-                mask_array = np.array(mask)
-
-            # Ensure mask is binary and has the correct data type
+                img_array = np.array(image)
+                
+                # Automatic detection based on histogram
+                # Check if it looks like a binary mask (few distinct values)
+                if len(np.unique(img_array)) < 10:
+                    st.info("Detected binary mask image based on pixel values!")
+                    mask_array = img_array
+                    
+                    # Process as mask
+                    if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
+                        mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
+                    
+                    # Apply binary threshold to ensure it's a proper mask
+                    _, mask_binary = cv2.threshold(mask_array.astype(np.uint8), 1, 255, cv2.THRESH_BINARY)
+                    
+                    # Use our simplified 3-3-2 RGB Fire LUT for visualization
+                    binary_mask = (mask_binary > 0).astype(np.uint8)
+                    colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
+                    
+                    # Display the colored mask with black background
+                    st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT with 3-3-2 RGB mapping)", use_container_width=True)
+                else:
+                    # Process as DIC/phase contrast image
+                    image_array = img_array
+                    
+                    # Handle grayscale vs color images
+                    if len(image_array.shape) == 3 and image_array.shape[2] > 1:
+                        # Save color image for processing if needed
+                        color_image = image_array.copy()
+                        # Convert to grayscale for analysis
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+                    
+                    # Apply auto-contrast for better visualization
+                    auto_contrast_img = auto_contrast(image_array, clip_percent=0.5)
+                    st.image(auto_contrast_img, caption="Phase Contrast Image (Auto-contrast)", use_container_width=True)
+        
+        # Display information about image detection
+        if image_array is not None and mask_array is not None:
+            st.success("✅ Both DIC/phase contrast image and mask detected! Ready for analysis.")
+        elif image_array is not None:
+            st.warning("⚠️ Only DIC/phase contrast image detected. Please upload a mask to analyze cell division.")
+        elif mask_array is not None:
+            st.warning("⚠️ Only mask image detected. Please upload a DIC/phase contrast image to analyze cell division.")
+    
+        # Ensure mask is binary and has the correct data type if it exists
+        if mask_array is not None:
             if len(mask_array.shape) == 3 and mask_array.shape[2] > 1:
                 mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
 

@@ -223,28 +223,28 @@ def app():
         with col1:
             if st.button("⬅️", help="Move Left (1 pixel)"):
                 st.session_state.x_shift -= 1
-                st.experimental_rerun()
+                st.rerun()
         
         with col3:
             if st.button("➡️", help="Move Right (1 pixel)"):
                 st.session_state.x_shift += 1
-                st.experimental_rerun()
+                st.rerun()
         
         with col2:
             if st.button("⬆️", help="Move Up (1 pixel)"):
                 st.session_state.y_shift -= 1
-                st.experimental_rerun()
+                st.rerun()
         
         with col4:
             if st.button("⬇️", help="Move Down (1 pixel)"):
                 st.session_state.y_shift += 1
-                st.experimental_rerun()
+                st.rerun()
         
         with col5:
             if st.button("Reset Alignment", help="Reset alignment to center (0,0)"):
                 st.session_state.x_shift = 0
                 st.session_state.y_shift = 0
-                st.experimental_rerun()
+                st.rerun()
         
         # Overlay opacity control with a narrower default range
         overlay_opacity = st.slider(
@@ -391,7 +391,7 @@ def app():
         ### Features:
         
         - **Auto-detection**: The tool automatically detects whether the uploaded file is a DIC or mask image based on metadata
-        - **Fire LUT**: Segmentation masks are displayed using a Fiji-like "Fire" LUT with 3-3-2 RGB color mapping
+        - **Fire LUT**: Segmentation masks are displayed using a Fiji-like "Fire" LUT with 3-3-2 RGB color mapping (Red: 255, Green: 210, Blue: 150)
         - **Fine Controls**: Precision pixel-by-pixel alignment controls for perfect positioning
         - **Channel Selection**: For multichannel fluorescence images, you can select specific channels
         - **Flexible Overlay**: Choose between DIC overlay or mask overlay with adjustable opacity
