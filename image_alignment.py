@@ -179,11 +179,30 @@ def app():
         # Get image dimensions (using DIC image as reference)
         height, width = dic_array.shape[:2]
         
+        # Check if we have URL parameters with coordinates
+        query_params = st.experimental_get_query_params()
+        
         # Initialize session state for fine adjustment
         if 'x_shift' not in st.session_state:
-            st.session_state.x_shift = 0
+            # Check if we have URL parameters first
+            if 'x_shift' in query_params:
+                try:
+                    st.session_state.x_shift = float(query_params['x_shift'][0])
+                except:
+                    st.session_state.x_shift = 0
+            else:
+                st.session_state.x_shift = 0
+                
         if 'y_shift' not in st.session_state:
-            st.session_state.y_shift = 0
+            # Check if we have URL parameters first
+            if 'y_shift' in query_params:
+                try:
+                    st.session_state.y_shift = float(query_params['y_shift'][0])
+                except:
+                    st.session_state.y_shift = 0
+            else:
+                st.session_state.y_shift = 0
+                
         if 'overlay_opacity' not in st.session_state:
             st.session_state.overlay_opacity = 30
         
@@ -607,27 +626,64 @@ def app():
                     
                     // Function to sync with Streamlit
                     function syncWithStreamlit() {{
-                        if (window.parent && window.parent.postMessage) {{
-                            const message = {{
-                                type: 'streamlit:setComponentValue',
-                                data: {{
-                                    x: parseFloat(currentXOffset.toFixed(1)),
-                                    y: parseFloat(currentYOffset.toFixed(1))
-                                }}
-                            }};
+                        // Create a form to submit data back to Streamlit
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = window.location.href;
+                        form.style.display = 'none';
+                        
+                        // Create X input
+                        const xInput = document.createElement('input');
+                        xInput.type = 'hidden';
+                        xInput.name = 'x_shift';
+                        xInput.value = parseFloat(currentXOffset.toFixed(1));
+                        form.appendChild(xInput);
+                        
+                        // Create Y input
+                        const yInput = document.createElement('input');
+                        yInput.type = 'hidden';
+                        yInput.name = 'y_shift';
+                        yInput.value = parseFloat(currentYOffset.toFixed(1));
+                        form.appendChild(yInput);
+                        
+                        // Add form to document and submit
+                        document.body.appendChild(form);
+                        
+                        // Show updated UI
+                        stateIsSynced = true;
+                        positionDisplay.style.color = '#4CAF50'; // Green to indicate saved
+                        
+                        // Show saved message
+                        saveMessage.style.display = 'block';
+                        saveMessage.textContent = 'Position saved! Click button below to update Streamlit.';
+                        
+                        // Create a visible button for the user to click
+                        const updateButton = document.createElement('button');
+                        updateButton.textContent = 'Update Sliders (Reload Page)';
+                        updateButton.style.backgroundColor = '#ff4b4b';
+                        updateButton.style.color = 'white';
+                        updateButton.style.fontWeight = 'bold';
+                        updateButton.style.padding = '8px 16px';
+                        updateButton.style.marginTop = '10px';
+                        updateButton.style.border = 'none';
+                        updateButton.style.borderRadius = '4px';
+                        updateButton.style.cursor = 'pointer';
+                        
+                        updateButton.onclick = function() {{
+                            // Create URL with parameters
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('x_shift', parseFloat(currentXOffset.toFixed(1)));
+                            url.searchParams.set('y_shift', parseFloat(currentYOffset.toFixed(1)));
                             
-                            window.parent.postMessage(message, '*');
-                            
-                            // Update UI to indicate synced state
-                            stateIsSynced = true;
-                            positionDisplay.style.color = '#4CAF50'; // Green to indicate saved
-                            
-                            // Show saved message
-                            saveMessage.style.display = 'block';
-                            setTimeout(() => {{
-                                saveMessage.style.display = 'none';
-                            }}, 2000);
-                        }}
+                            // Redirect to the new URL
+                            window.parent.location.href = url.toString();
+                        }};
+                        
+                        // Replace the save message with the button
+                        saveMessage.innerHTML = '';
+                        saveMessage.appendChild(document.createTextNode('Position ready! '));
+                        saveMessage.appendChild(updateButton);
+                        saveMessage.style.display = 'block';
                     }}
                     
                     // Custom event listeners for Streamlit communications
@@ -665,12 +721,11 @@ def app():
             </html>
             """
             
-            # Use a custom component instead of plain HTML for better state management
+            # Use HTML component for display
             component_value = st.components.v1.html(
                 html, 
                 height=img_height+150,  # Add more space for the controls
-                scrolling=False,
-                key=component_key
+                scrolling=False
             )
             
             # Check if we received a value back from the component
