@@ -224,182 +224,129 @@ def app():
         if 'overlay_opacity' not in st.session_state:
             st.session_state.overlay_opacity = 30
         
-        # Set up the main layout with controls on left, image on right
-        left_col, right_col = st.columns([2, 5])
+        # Set up the main layout with full image display
+        st.subheader("Interactive Alignment Tool")
         
-        with left_col:
-            st.subheader("Alignment Controls")
-            
-            # Create sliders for shifting with a smaller range for more precise control
-            x_shift = st.slider("Shift X (horizontal)", 
-                            float(-min(width//4, 100)), 
-                            float(min(width//4, 100)), 
-                            float(st.session_state.x_shift),
-                            step=0.1)
-            
-            y_shift = st.slider("Shift Y (vertical)", 
-                            float(-min(height//4, 100)), 
-                            float(min(height//4, 100)), 
-                            float(st.session_state.y_shift),
-                            step=0.1)
-            
-            # Update session state
-            st.session_state.x_shift = x_shift
-            st.session_state.y_shift = y_shift
-            
-            # Display current shift values
-            st.markdown(f"**Current Shift Values:**")
-            st.markdown(f"**X = {st.session_state.x_shift:.1f}, Y = {st.session_state.y_shift:.1f} pixels**")
-            
-            # Fine adjustment buttons
-            st.markdown("### Fine Adjustment")
-            
-            col1, col2, col3 = st.columns([1, 1, 1])
-            
-            with col1:
-                if st.button("⬅️", help="Move Left (0.1 pixel)"):
-                    st.session_state.x_shift -= 0.1
-                    st.rerun()
-            
-            with col2:
-                if st.button("⬆️", help="Move Up (0.1 pixel)"):
-                    st.session_state.y_shift -= 0.1
-                    st.rerun()
-                st.write("")
-                st.write("")
-                if st.button("⬇️", help="Move Down (0.1 pixel)"):
-                    st.session_state.y_shift += 0.1
-                    st.rerun()
-            
-            with col3:
-                if st.button("➡️", help="Move Right (0.1 pixel)"):
-                    st.session_state.x_shift += 0.1
-                    st.rerun()
-            
-            if st.button("Reset Alignment", help="Reset alignment to center (0,0)"):
-                st.session_state.x_shift = 0
-                st.session_state.y_shift = 0
-                st.rerun()
-            
-            # Overlay opacity control with a narrower default range
-            overlay_opacity = st.slider(
-                "Overlay Opacity (%)", 
-                min_value=10, 
-                max_value=70, 
-                value=st.session_state.overlay_opacity,
-                help="Control the opacity of the DIC/mask overlay"
-            )
-            st.session_state.overlay_opacity = overlay_opacity
+        # Store shift values
+        x_shift = st.session_state.x_shift
+        y_shift = st.session_state.y_shift
+        
+        # Overlay opacity control with a narrower default range
+        overlay_opacity = st.slider(
+            "Overlay Opacity (%)", 
+            min_value=10, 
+            max_value=70, 
+            value=st.session_state.overlay_opacity,
+            help="Control the opacity of the DIC/mask overlay"
+        )
+        st.session_state.overlay_opacity = overlay_opacity
                 
-            # Add download button for the overlay image
-            if st.button("Generate Overlay for Download"):
-                # Prepare the overlay image for download
-                try:
-                    # Create the overlay by applying the shift and blending
-                    # This section is only executed when user wants to download
-                    
-                    # Prepare fluorescence image
-                    if len(fluo_array.shape) == 2:
-                        fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
-                        cmap = plt.cm.get_cmap('hot')
-                        fluo_colored = cmap(fluo_contrast)
-                        fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
+        # Add download button for the overlay image
+        if st.button("Generate Overlay for Download"):
+            # Prepare the overlay image for download
+            try:
+                # Create the overlay by applying the shift and blending
+                # This section is only executed when user wants to download
+                
+                # Prepare fluorescence image
+                if len(fluo_array.shape) == 2:
+                    fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
+                    cmap = plt.cm.get_cmap('hot')
+                    fluo_colored = cmap(fluo_contrast)
+                    fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
+                else:
+                    fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
+                    if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
+                        fluo_rgb = fluo_rgb[:, :, :3]
+                
+                # Prepare DIC/mask image
+                if is_mask:
+                    # Create colored mask
+                    if len(mask_array.shape) == 2:
+                        mask_bin = (mask_array > 0).astype(np.uint8)
+                        overlay_rgb = apply_fire_lut_to_binary(mask_bin)
                     else:
-                        fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
-                        if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
-                            fluo_rgb = fluo_rgb[:, :, :3]
-                    
-                    # Prepare DIC/mask image
-                    if is_mask:
-                        # Create colored mask
-                        if len(mask_array.shape) == 2:
-                            mask_bin = (mask_array > 0).astype(np.uint8)
-                            overlay_rgb = apply_fire_lut_to_binary(mask_bin)
-                        else:
-                            overlay_rgb = mask_array
+                        overlay_rgb = mask_array
+                else:
+                    # Use DIC image
+                    if len(dic_array.shape) == 2:
+                        overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
                     else:
-                        # Use DIC image
-                        if len(dic_array.shape) == 2:
-                            overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
-                        else:
-                            overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
-                    
-                    # Apply shift using affine transformation
-                    M = np.float32([[1, 0, x_shift], [0, 1, y_shift]])
-                    shifted_overlay = cv2.warpAffine(overlay_rgb, M, (width, height))
-                    
-                    # Blend images
-                    alpha = overlay_opacity / 100.0
-                    beta = 1.0 - alpha
-                    overlay = cv2.addWeighted(shifted_overlay, alpha, fluo_rgb, beta, 0)
-                    
-                    # Add download button
-                    buf = io.BytesIO()
-                    Image.fromarray(overlay).save(buf, format="PNG")
-                    st.download_button(
-                        label="Download Overlay Image",
-                        data=buf.getvalue(),
-                        file_name="aligned_overlay.png",
-                        mime="image/png"
-                    )
-                except Exception as e:
-                    st.error(f"Error generating overlay: {e}")
-                    st.info("Please try different images or settings.")
+                        overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
+                
+                # Apply shift using affine transformation
+                M = np.float32([[1, 0, x_shift], [0, 1, y_shift]])
+                shifted_overlay = cv2.warpAffine(overlay_rgb, M, (width, height))
+                
+                # Blend images
+                alpha = overlay_opacity / 100.0
+                beta = 1.0 - alpha
+                overlay = cv2.addWeighted(shifted_overlay, alpha, fluo_rgb, beta, 0)
+                
+                # Add download button
+                buf = io.BytesIO()
+                Image.fromarray(overlay).save(buf, format="PNG")
+                st.download_button(
+                    label="Download Overlay Image",
+                    data=buf.getvalue(),
+                    file_name="aligned_overlay.png",
+                    mime="image/png"
+                )
+            except Exception as e:
+                st.error(f"Error generating overlay: {e}")
+                st.info("Please try different images or settings.")
+            
+        # Prepare the base (fluorescence) image
+        if len(fluo_array.shape) == 2:
+            fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
+            cmap = plt.cm.get_cmap('hot')
+            fluo_colored = cmap(fluo_contrast)
+            fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
+        else:
+            fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
+            if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
+                fluo_rgb = fluo_rgb[:, :, :3]
         
-        with right_col:
-            st.subheader("Aligned Overlay")
-            
-            # Prepare the base (fluorescence) image
-            if len(fluo_array.shape) == 2:
-                fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
-                cmap = plt.cm.get_cmap('hot')
-                fluo_colored = cmap(fluo_contrast)
-                fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
+        # Prepare the overlay (DIC/mask) image
+        if is_mask:
+            # Create colored mask
+            if len(mask_array.shape) == 2:
+                mask_bin = (mask_array > 0).astype(np.uint8)
+                overlay_rgb = apply_fire_lut_to_binary(mask_bin)
             else:
-                fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
-                if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
-                    fluo_rgb = fluo_rgb[:, :, :3]
-            
-            # Prepare the overlay (DIC/mask) image
-            if is_mask:
-                # Create colored mask
-                if len(mask_array.shape) == 2:
-                    mask_bin = (mask_array > 0).astype(np.uint8)
-                    overlay_rgb = apply_fire_lut_to_binary(mask_bin)
-                else:
-                    overlay_rgb = mask_array
+                overlay_rgb = mask_array
+        else:
+            # Use DIC image
+            if len(dic_array.shape) == 2:
+                overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
             else:
-                # Use DIC image
-                if len(dic_array.shape) == 2:
-                    overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
-                else:
-                    overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
+                overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
             
-            # Convert to PIL images and get dimensions
-            fluo_pil = Image.fromarray(fluo_rgb)
-            overlay_pil = Image.fromarray(overlay_rgb)
+        # Convert to PIL images and get dimensions
+        fluo_pil = Image.fromarray(fluo_rgb)
+        overlay_pil = Image.fromarray(overlay_rgb)
+        
+        # Get true dimensions (to maintain aspect ratio)
+        img_width, img_height = fluo_pil.size
+        
+        # Convert images to base64 for loading in browser
+        fluo_buffer = io.BytesIO()
+        fluo_pil.save(fluo_buffer, format="PNG")
+        fluo_base64 = base64.b64encode(fluo_buffer.getvalue()).decode()
+        
+        overlay_buffer = io.BytesIO()
+        overlay_pil.save(overlay_buffer, format="PNG")
+        overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
+        
+        # Component key for forcing re-renders when state changes
+        component_key = f"overlay_{id(fluo_array)}_{id(dic_array)}_{x_shift}_{y_shift}_{overlay_opacity}"
+        
+        # Create placeholder for displaying the received coordinates
+        coordinates_placeholder = st.empty()
             
-            # Get true dimensions (to maintain aspect ratio)
-            img_width, img_height = fluo_pil.size
-            
-            # Convert images to base64 for loading in browser
-            fluo_buffer = io.BytesIO()
-            fluo_pil.save(fluo_buffer, format="PNG")
-            fluo_base64 = base64.b64encode(fluo_buffer.getvalue()).decode()
-            
-            overlay_buffer = io.BytesIO()
-            overlay_pil.save(overlay_buffer, format="PNG")
-            overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
-            
-            # Component key for forcing re-renders when state changes
-            component_key = f"overlay_{id(fluo_array)}_{id(dic_array)}_{x_shift}_{y_shift}_{overlay_opacity}"
-            
-            # Create placeholder for displaying the received coordinates
-            coordinates_placeholder = st.empty()
-            
-            # Create a client-side JavaScript implementation with cached images
-            # This enables dragging directly in the browser for better responsiveness
-            html = f"""
+        # Create a client-side JavaScript implementation with cached images
+        # This enables dragging directly in the browser for better responsiveness
+        html = f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -486,7 +433,7 @@ def app():
                 </div>
                 
                 <div id="controls">
-                    <div id="position-display">X: {x_shift:.1f}, Y: {y_shift:.1f} pixels</div>
+                    <div id="position-display">X: {x_shift:.2f}, Y: {y_shift:.2f} pixels</div>
                     <div style="margin-top: 8px;">
                         <button id="reset-btn">Reset Position</button>
                         <!-- Add fine-adjustment buttons for keyboard-like control -->
@@ -639,7 +586,7 @@ def app():
                     
                     // Update position display
                     function updatePositionDisplay() {{
-                        positionDisplay.textContent = `X: ${{currentXOffset.toFixed(1)}}, Y: ${{currentYOffset.toFixed(1)}} pixels`;
+                        positionDisplay.textContent = `X: ${{currentXOffset.toFixed(2)}}, Y: ${{currentYOffset.toFixed(2)}} pixels`;
                     }}
                     
                     // Function to sync with Streamlit
@@ -654,14 +601,14 @@ def app():
                         const xInput = document.createElement('input');
                         xInput.type = 'hidden';
                         xInput.name = 'x_shift';
-                        xInput.value = parseFloat(currentXOffset.toFixed(1));
+                        xInput.value = parseFloat(currentXOffset.toFixed(2));
                         form.appendChild(xInput);
                         
                         // Create Y input
                         const yInput = document.createElement('input');
                         yInput.type = 'hidden';
                         yInput.name = 'y_shift';
-                        yInput.value = parseFloat(currentYOffset.toFixed(1));
+                        yInput.value = parseFloat(currentYOffset.toFixed(2));
                         form.appendChild(yInput);
                         
                         // Add form to document and submit
@@ -690,8 +637,8 @@ def app():
                         updateButton.onclick = function() {{
                             // Create URL with parameters
                             const url = new URL(window.location.href);
-                            url.searchParams.set('x_shift', parseFloat(currentXOffset.toFixed(1)));
-                            url.searchParams.set('y_shift', parseFloat(currentYOffset.toFixed(1)));
+                            url.searchParams.set('x_shift', parseFloat(currentXOffset.toFixed(2)));
+                            url.searchParams.set('y_shift', parseFloat(currentYOffset.toFixed(2)));
                             
                             // Redirect to the new URL
                             window.parent.location.href = url.toString();
@@ -739,59 +686,59 @@ def app():
             </html>
             """
             
-            # Use HTML component for display
-            st.components.v1.html(
-                html, 
-                height=img_height+150,  # Add more space for the controls
-                scrolling=False
-            )
+        # Use HTML component for display
+        st.components.v1.html(
+            html, 
+            height=img_height+150,  # Add more space for the controls
+            scrolling=False
+        )
             
-            # Check URL parameters for button clicks
-            if 'x_shift' in st.query_params and 'y_shift' in st.query_params:
-                try:
-                    # Get values from URL parameters
-                    x_param = st.query_params['x_shift']
-                    y_param = st.query_params['y_shift']
+        # Check URL parameters for button clicks
+        if 'x_shift' in st.query_params and 'y_shift' in st.query_params:
+            try:
+                # Get values from URL parameters
+                x_param = st.query_params['x_shift']
+                y_param = st.query_params['y_shift']
+                
+                # Parse values
+                new_x = float(x_param) if isinstance(x_param, str) else float(x_param[0])
+                new_y = float(y_param) if isinstance(y_param, str) else float(y_param[0])
+                
+                # Update session state only if values have changed
+                if abs(st.session_state.x_shift - new_x) > 0.01 or abs(st.session_state.y_shift - new_y) > 0.01:
+                    st.session_state.x_shift = new_x
+                    st.session_state.y_shift = new_y
                     
-                    # Parse values
-                    new_x = float(x_param) if isinstance(x_param, str) else float(x_param[0])
-                    new_y = float(y_param) if isinstance(y_param, str) else float(y_param[0])
+                    # Display the updated values
+                    coordinates_placeholder.info(f"Synchronized offset values: X={st.session_state.x_shift:.2f}, Y={st.session_state.y_shift:.2f}")
                     
-                    # Update session state only if values have changed
-                    if abs(st.session_state.x_shift - new_x) > 0.01 or abs(st.session_state.y_shift - new_y) > 0.01:
-                        st.session_state.x_shift = new_x
-                        st.session_state.y_shift = new_y
-                        
-                        # Display the updated values
-                        coordinates_placeholder.info(f"Synchronized offset values: X={st.session_state.x_shift:.1f}, Y={st.session_state.y_shift:.1f}")
-                        
-                        # Wait a moment, then rerun to update the sliders to match (with clean URL)
-                        time.sleep(0.1)
-                        # Clear URL parameters
-                        new_params = st.query_params.copy()
-                        if 'x_shift' in new_params:
-                            del new_params['x_shift']
-                        if 'y_shift' in new_params:
-                            del new_params['y_shift']
-                        st.query_params.update(new_params)
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Error updating coordinates: {e}")
-                    # Use safe logging
-                    st.error(f"Parameters: x_shift={st.query_params.get('x_shift', 'N/A')}, y_shift={st.query_params.get('y_shift', 'N/A')}")
-            
-            # Add hidden indicator for the component to detect when state has changed
-            st.markdown(
-                f"""
-                <div id="streamlit-state" 
-                    data-x="{x_shift}" 
-                    data-y="{y_shift}"
-                    data-opacity="{overlay_opacity/100}"
-                    style="display: none;">
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                    # Wait a moment, then rerun to update the sliders to match (with clean URL)
+                    time.sleep(0.1)
+                    # Clear URL parameters
+                    new_params = st.query_params.copy()
+                    if 'x_shift' in new_params:
+                        del new_params['x_shift']
+                    if 'y_shift' in new_params:
+                        del new_params['y_shift']
+                    st.query_params.update(new_params)
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error updating coordinates: {e}")
+                # Use safe logging
+                st.error(f"Parameters: x_shift={st.query_params.get('x_shift', 'N/A')}, y_shift={st.query_params.get('y_shift', 'N/A')}")
+        
+        # Add hidden indicator for the component to detect when state has changed
+        st.markdown(
+            f"""
+            <div id="streamlit-state" 
+                data-x="{x_shift}" 
+                data-y="{y_shift}"
+                data-opacity="{overlay_opacity/100}"
+                style="display: none;">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     
     # Instructions/guide
     with st.sidebar:
