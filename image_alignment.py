@@ -191,12 +191,14 @@ def app():
             x_shift = st.slider("Shift X (horizontal)", 
                               -min(width//4, 100), 
                               min(width//4, 100), 
-                              st.session_state.x_shift)
+                              float(st.session_state.x_shift),
+                              step=0.1)
         with col2:
             y_shift = st.slider("Shift Y (vertical)", 
                               -min(height//4, 100), 
                               min(height//4, 100), 
-                              st.session_state.y_shift)
+                              float(st.session_state.y_shift),
+                              step=0.1)
         
         # Update session state
         st.session_state.x_shift = x_shift
@@ -204,26 +206,29 @@ def app():
         
         # Fine adjustment buttons
         st.markdown("### Fine Adjustment")
+        # Display current X and Y shift values
+        st.markdown(f"**Current Shift Values: X = {st.session_state.x_shift:.1f}, Y = {st.session_state.y_shift:.1f} pixels**")
+        
         col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 3])
         
         with col1:
-            if st.button("⬅️", help="Move Left (1 pixel)"):
-                st.session_state.x_shift -= 1
+            if st.button("⬅️", help="Move Left (0.1 pixel)"):
+                st.session_state.x_shift -= 0.1
                 st.rerun()
         
         with col3:
-            if st.button("➡️", help="Move Right (1 pixel)"):
-                st.session_state.x_shift += 1
+            if st.button("➡️", help="Move Right (0.1 pixel)"):
+                st.session_state.x_shift += 0.1
                 st.rerun()
         
         with col2:
-            if st.button("⬆️", help="Move Up (1 pixel)"):
-                st.session_state.y_shift -= 1
+            if st.button("⬆️", help="Move Up (0.1 pixel)"):
+                st.session_state.y_shift -= 0.1
                 st.rerun()
         
         with col4:
-            if st.button("⬇️", help="Move Down (1 pixel)"):
-                st.session_state.y_shift += 1
+            if st.button("⬇️", help="Move Down (0.1 pixel)"):
+                st.session_state.y_shift += 0.1
                 st.rerun()
         
         with col5:
@@ -241,12 +246,11 @@ def app():
             help="Control the opacity of the DIC/mask overlay"
         )
         
-        # Choose overlay type
-        overlay_type = st.radio(
-            "Overlay Type",
-            ["DIC over Fluorescence", "Mask over Fluorescence (if available)"],
-            horizontal=True
-        )
+        # Default overlay type - automatic based on what was detected
+        if is_mask:
+            overlay_type = "Mask over Fluorescence (if available)" 
+        else:
+            overlay_type = "DIC over Fluorescence"
         
         # Create the overlay with alignment
         st.subheader("Aligned Overlay")
@@ -394,11 +398,11 @@ def app():
         
         2. **Adjust alignment**:
            - Use the sliders to shift the DIC/mask image to align with the fluorescence image
-           - For fine adjustments, use the arrow buttons to move 1 pixel at a time
+           - For fine adjustments, use the arrow buttons to move 0.1 pixel at a time
         
         3. **Customize overlay**:
            - Adjust the opacity of the overlay
-           - Choose between DIC or mask for the overlay
+           - The system will automatically use the correct image type (DIC or mask)
         
         4. **Download result**:
            - When satisfied with the alignment, use the download button to save the aligned overlay
@@ -411,8 +415,8 @@ def app():
         
         For even finer control, you can use keyboard shortcuts after clicking on the sliders:
         
-        - **←/→**: Shift X-axis by 1 pixel
-        - **↑/↓**: Shift Y-axis by 1 pixel
+        - **←/→**: Shift X-axis by 0.1 pixel
+        - **↑/↓**: Shift Y-axis by 0.1 pixel
         
         *Note: You need to click on a slider first for keyboard shortcuts to work*
         """)
