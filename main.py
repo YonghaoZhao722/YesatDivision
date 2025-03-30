@@ -129,14 +129,16 @@ def app():
     else:
         confidence_threshold = 0.20  # Updated as requested
 
-    # Main content area - file upload with automatic detection
-    st.subheader("DIC/Mask File")
-    dic_image = st.file_uploader("Upload DIC or mask image (automatic detection)", type=["jpg", "jpeg", "png", "tif", "tiff"])
-    
-    # Variables to store our image arrays
-    image_array = None
-    mask_array = None
-    is_mask = False
+    # Main content area - file upload with separate columns
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("DIC/Phase Contrast Image")
+        dic_image = st.file_uploader("Upload DIC/Phase contrast image", type=["jpg", "jpeg", "png", "tif", "tiff"])
+        
+        # Variables to store our image arrays
+        image_array = None
+        mask_array = None
     
     if dic_image is not None:
         # Check file extension
