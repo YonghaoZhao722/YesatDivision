@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import os
 import tifffile
+import json
 from utils import auto_contrast
 
 def app():
@@ -74,8 +75,31 @@ def app():
                 mask_image.seek(0)
                 mask_array = tifffile.imread(mask_image)
                 
-                # Convert to binary mask if needed
-                _, mask_binary = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
+                # Check for metadata to determine if it's a mask
+                is_mask = False
+                metadata = tifffile.TiffFile(mask_image).pages[0].tags
+                if 'ImageDescription' in metadata:
+                    desc = metadata['ImageDescription'].value
+                    if isinstance(desc, bytes):
+                        desc = desc.decode('utf-8', errors='ignore')
+                    if '{"shape":' in desc or '"shape":' in desc:
+                        is_mask = True
+                        st.info("Detected mask image from metadata")
+                
+                # Convert to binary mask if needed based on data type
+                mask_binary = None
+                # Handle different data types
+                if mask_array.dtype == np.uint32 or mask_array.dtype == np.int32:
+                    # For uint32 or int32 masks, just convert values > 0 to 1
+                    mask_binary = (mask_array > 0).astype(np.uint8) * 255
+                    st.info(f"Converted mask from {mask_array.dtype} to binary")
+                elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
+                    # For float masks, threshold at a small value
+                    mask_binary = (mask_array > 0.1).astype(np.uint8) * 255
+                    st.info(f"Converted mask from {mask_array.dtype} to binary")
+                else:
+                    # For uint8, uint16, etc.
+                    _, mask_binary = cv2.threshold(mask_array.astype(np.uint8), 1, 255, cv2.THRESH_BINARY)
                 
                 # Apply color for visualization
                 cmap = plt.colormaps['plasma']
@@ -169,19 +193,65 @@ def app():
         # Get image dimensions (using DIC image as reference)
         height, width = dic_array.shape[:2]
         
-        # Create sliders for shifting
+        # Initialize session state for fine adjustment
+        if 'x_shift' not in st.session_state:
+            st.session_state.x_shift = 0
+        if 'y_shift' not in st.session_state:
+            st.session_state.y_shift = 0
+        
+        # Create sliders for shifting with a smaller range for more precise control
         col1, col2 = st.columns(2)
         with col1:
-            x_shift = st.slider("Shift X (horizontal)", -width//2, width//2, 0)
+            x_shift = st.slider("Shift X (horizontal)", 
+                              -min(width//4, 100), 
+                              min(width//4, 100), 
+                              st.session_state.x_shift)
         with col2:
-            y_shift = st.slider("Shift Y (vertical)", -height//2, height//2, 0)
-            
-        # Overlay opacity control
+            y_shift = st.slider("Shift Y (vertical)", 
+                              -min(height//4, 100), 
+                              min(height//4, 100), 
+                              st.session_state.y_shift)
+        
+        # Update session state
+        st.session_state.x_shift = x_shift
+        st.session_state.y_shift = y_shift
+        
+        # Fine adjustment buttons
+        st.markdown("### Fine Adjustment")
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 3])
+        
+        with col1:
+            if st.button("⬅️", help="Move Left (1 pixel)"):
+                st.session_state.x_shift -= 1
+                st.experimental_rerun()
+        
+        with col3:
+            if st.button("➡️", help="Move Right (1 pixel)"):
+                st.session_state.x_shift += 1
+                st.experimental_rerun()
+        
+        with col2:
+            if st.button("⬆️", help="Move Up (1 pixel)"):
+                st.session_state.y_shift -= 1
+                st.experimental_rerun()
+        
+        with col4:
+            if st.button("⬇️", help="Move Down (1 pixel)"):
+                st.session_state.y_shift += 1
+                st.experimental_rerun()
+        
+        with col5:
+            if st.button("Reset Alignment", help="Reset alignment to center (0,0)"):
+                st.session_state.x_shift = 0
+                st.session_state.y_shift = 0
+                st.experimental_rerun()
+        
+        # Overlay opacity control with a narrower default range
         overlay_opacity = st.slider(
             "Overlay Opacity (%)", 
             min_value=10, 
-            max_value=100, 
-            value=50,
+            max_value=70, 
+            value=30,
             help="Control the opacity of the DIC/mask overlay"
         )
         
@@ -203,14 +273,38 @@ def app():
             src_image = mask_array
             # Convert to RGB if needed
             if len(src_image.shape) == 2:
-                # Convert to binary first
-                _, src_image_bin = cv2.threshold(src_image, 1, 255, cv2.THRESH_BINARY)
+                # Handle different data types for the mask
+                if src_image.dtype == np.uint32 or src_image.dtype == np.int32:
+                    # For uint32 or int32 masks, just convert values > 0 to 1
+                    src_image_bin = (src_image > 0).astype(np.uint8) * 255
+                elif src_image.dtype == np.float32 or src_image.dtype == np.float64:
+                    # For float masks, threshold at a small value
+                    src_image_bin = (src_image > 0.1).astype(np.uint8) * 255
+                else:
+                    # For uint8, uint16, etc.
+                    try:
+                        _, src_image_bin = cv2.threshold(src_image.astype(np.uint8), 1, 255, cv2.THRESH_BINARY)
+                    except Exception as e:
+                        st.error(f"Error processing mask: {e}")
+                        # Fallback for problematic images
+                        src_image_bin = (src_image > src_image.mean()/10).astype(np.uint8) * 255
                 
-                # Apply color
-                cmap = plt.colormaps['plasma']
-                src_image_color = cmap(src_image_bin.astype(float) / 255.0)
-                src_image_color = (src_image_color[:, :, :3] * 255).astype(np.uint8)
-                src_image = src_image_color
+                # Apply the 3-3-2 RGB "fire" colormap (similar to Fiji "fire" LUT)
+                # Create a "Fire" LUT similar to ImageJ/Fiji
+                h, w = src_image_bin.shape[:2]
+                rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+                
+                # Apply a custom 3-3-2 RGB LUT (similar to "fire" in ImageJ)
+                # Red channel (3 bits)
+                rgb_image[:,:,0] = (src_image_bin > 0) * 255
+                
+                # Green channel (3 bits)
+                rgb_image[:,:,1] = (src_image_bin > 0) * 210
+                
+                # Blue channel (2 bits)
+                rgb_image[:,:,2] = (src_image_bin > 0) * 150
+                
+                src_image = rgb_image
         else:
             src_image = dic_array
             # Convert to RGB if needed
@@ -289,14 +383,26 @@ def app():
         1. Upload a DIC/phase contrast image (and optionally its segmentation mask)
         2. Upload a fluorescence image (Cy3, DAPI, or other fluorescent channel)
         3. Use the sliders to shift the DIC/mask image to align with the fluorescence image
-        4. Adjust the overlay opacity to best visualize the alignment
-        5. Download the aligned overlay image when satisfied
+        4. Use the ⬅️⬆️➡️⬇️ buttons for 1-pixel precision adjustments
+        5. Adjust the overlay opacity (default 30%) to best visualize the alignment
+        6. Choose between DIC or mask overlay
+        7. Download the aligned overlay image when satisfied
         
-        ### Tips:
+        ### Features:
         
-        - For multichannel fluorescence images, you can select specific channels
-        - You can choose to overlay either the DIC image or the segmentation mask on the fluorescence image
-        - The shift values (X and Y) tell you how much the images needed to be aligned, which can be useful for batch processing
+        - **Auto-detection**: The tool automatically detects whether the uploaded file is a DIC or mask image based on metadata
+        - **Fire LUT**: Segmentation masks are displayed using a Fiji-like "Fire" LUT with 3-3-2 RGB color mapping
+        - **Fine Controls**: Precision pixel-by-pixel alignment controls for perfect positioning
+        - **Channel Selection**: For multichannel fluorescence images, you can select specific channels
+        - **Flexible Overlay**: Choose between DIC overlay or mask overlay with adjustable opacity
+        - **Alignment Values**: The shift values (X and Y) show the offset between images for batch processing
+        
+        ### Supported Formats:
+        
+        - 16-bit TIF/TIFF microscopy images
+        - 8-bit mask images
+        - Standard file formats (JPG, PNG)
+        - Various data types (uint8, uint16, uint32, float)
         """)
 
 if __name__ == "__main__":

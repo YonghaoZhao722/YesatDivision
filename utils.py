@@ -6,6 +6,91 @@ from skimage.util import img_as_float, img_as_ubyte
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 
+# Create a custom Fiji-like "Fire" LUT for mask visualization
+def create_fire_lut():
+    """
+    Create a custom colormap similar to ImageJ/Fiji's "Fire" LUT for mask visualization.
+    
+    Returns:
+    --------
+    fire_cmap : matplotlib.colors.LinearSegmentedColormap
+        Custom "Fire" colormap
+    """
+    # Define the Fire LUT colors (red-yellow-white progression)
+    fire_colors = [
+        (0.0, 0.0, 0.0),     # Black
+        (0.5, 0.0, 0.0),     # Dark red
+        (1.0, 0.0, 0.0),     # Red
+        (1.0, 0.5, 0.0),     # Orange
+        (1.0, 1.0, 0.0),     # Yellow
+        (1.0, 1.0, 0.5),     # Light yellow
+        (1.0, 1.0, 1.0)      # White
+    ]
+    
+    # Create the colormap
+    fire_cmap = LinearSegmentedColormap.from_list('fire', fire_colors)
+    return fire_cmap
+
+# Create a simplified 3-3-2 RGB "Fire" LUT for binary masks
+def apply_fire_lut_to_binary(binary_mask):
+    """
+    Apply a Fiji-like "Fire" LUT to binary mask.
+    
+    Parameters:
+    -----------
+    binary_mask : numpy.ndarray
+        Binary mask (values 0 or 1)
+        
+    Returns:
+    --------
+    colored_mask : numpy.ndarray
+        RGB image with Fire LUT applied
+    """
+    h, w = binary_mask.shape[:2]
+    colored_mask = np.zeros((h, w, 3), dtype=np.uint8)
+    
+    # Create a more accurate Fiji "Fire" LUT with gradient effect
+    # This creates a red → orange → yellow → white progression
+    # To create a gradient effect, we'll use distance transform to get 
+    # distance from edge for each cell pixel
+    
+    # Only process if we have any foreground pixels
+    if np.any(binary_mask):
+        # Apply distance transform to get distance from edge for each pixel
+        # This will be used to create the gradient effect
+        dist_transform = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
+        
+        # Normalize to 0-255 for visualization
+        # Scale the distance transform to have max value of 255
+        max_dist = np.max(dist_transform)
+        if max_dist > 0:  # Avoid division by zero
+            normalized_dist = (dist_transform / max_dist * 255).astype(np.uint8)
+            
+            # Apply gradient-based fire LUT
+            # Pixels near the edge will be red, transitioning to orange, yellow, and white in the center
+            
+            # Red channel: Always high for all cell pixels
+            colored_mask[:,:,0] = binary_mask * 255
+            
+            # Green channel: Increases with distance from edge
+            # Starts low near edges, gets higher toward center
+            colored_mask[:,:,1] = cv2.multiply(normalized_dist, binary_mask)
+            
+            # Blue channel: Only high values near the center (brightest points)
+            # This creates the yellow→white transition for the center parts
+            # We use a threshold on normalized_dist to only color center parts
+            center_threshold = int(0.7 * 255)  # Only the inner 30% will have blue
+            blue_mask = normalized_dist > center_threshold
+            blue_values = ((normalized_dist - center_threshold) / (255 - center_threshold) * 255).astype(np.uint8)
+            colored_mask[:,:,2] = np.where(blue_mask, blue_values, 0)
+        else:
+            # Fallback to simple coloring if distance transform fails
+            colored_mask[:,:,0] = binary_mask * 255  # Red
+            colored_mask[:,:,1] = binary_mask * 150  # Green (less than red)
+            colored_mask[:,:,2] = binary_mask * 0    # No blue
+    
+    return colored_mask
+
 def preprocess_image(image, method="Basic"):
     """
     Preprocess the input image using different methods.

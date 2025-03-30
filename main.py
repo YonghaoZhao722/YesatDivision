@@ -7,7 +7,7 @@ import io
 import os
 import tifffile
 from cell_analysis import CellDivisionAnalyzer
-from utils import preprocess_image, create_visualization, format_results, auto_contrast
+from utils import preprocess_image, create_visualization, format_results, auto_contrast, apply_fire_lut_to_binary
 
 def app():
     # Initialize session state for this page
@@ -188,27 +188,48 @@ def app():
                 # Use tifffile for 16-bit TIFF images
                 mask_image.seek(0)
                 mask_array = tifffile.imread(mask_image)
+                
+                # Check for metadata to determine if it's a mask
+                is_mask = False
+                metadata = tifffile.TiffFile(mask_image).pages[0].tags
+                if 'ImageDescription' in metadata:
+                    desc = metadata['ImageDescription'].value
+                    if isinstance(desc, bytes):
+                        desc = desc.decode('utf-8', errors='ignore')
+                    if '{"shape":' in desc or '"shape":' in desc:
+                        is_mask = True
+                        st.info("Detected mask image from metadata")
+                
+                # Handle different data types for the mask
+                if mask_array.dtype == np.uint32 or mask_array.dtype == np.int32:
+                    # For uint32 or int32 masks, just convert values > 0 to binary
+                    mask_binary = (mask_array > 0).astype(np.uint8) * 255
+                    st.info(f"Converted mask from {mask_array.dtype} to binary")
+                    # Create binary version for processing
+                    mask_array = mask_array > 0
+                elif mask_array.dtype == np.float32 or mask_array.dtype == np.float64:
+                    # For float masks, threshold at a small value
+                    mask_binary = (mask_array > 0.1).astype(np.uint8) * 255
+                    st.info(f"Converted mask from {mask_array.dtype} to binary")
+                    # Create binary version for processing
+                    mask_array = mask_array > 0.1
+                else:
+                    # For uint8, uint16, etc.
+                    mask_threshold = 128 if mask_array.max() > 1 else 0.5
+                    mask_binary = (mask_array > mask_threshold).astype(np.uint8) * 255
+                    # Create binary version for processing
+                    mask_array = mask_array > mask_threshold
 
                 # Apply auto contrast to mask for better visualization
-                mask_auto_contrast = auto_contrast(mask_array, clip_percent=0.5)
+                mask_auto_contrast = mask_binary
 
-                # Create a black background version with colored cells
-                # Apply a colormap to the mask for better visualization
-                # Create a colored version of the mask using matplotlib's 'plasma' colormap
-                cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
-                
-                # Create a black background
-                colored_mask = np.zeros((mask_array.shape[0], mask_array.shape[1], 4), dtype=np.float32)
-                
-                # Only color the cells (non-zero pixels)
-                mask_nonzero = mask_auto_contrast > 0
-                colored_mask[mask_nonzero] = cmap(mask_auto_contrast[mask_nonzero])
-                
-                # Convert to uint8 for display (only RGB channels)
-                colored_mask_rgb = (colored_mask[:, :, :3] * 255).astype(np.uint8)
+                # Use our custom Fire LUT for visualization (similar to Fiji's "Fire" LUT)
+                # Apply the new 3-3-2 RGB Fire LUT to the binary mask
+                binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
+                colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
 
                 # Display the colored mask with black background
-                st.image(colored_mask_rgb, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
+                st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
             else:
                 # Standard handling for other image formats
                 mask = Image.open(mask_image)
@@ -222,23 +243,12 @@ def app():
                 # Apply auto contrast to mask for better visualization
                 mask_auto_contrast = auto_contrast(mask_array_temp, clip_percent=0.5)
 
-                # Create a black background version with colored cells
-                # Apply a colormap to the mask for better visualization
-                # Create a colored version of the mask using matplotlib's 'plasma' colormap
-                cmap = plt.colormaps['plasma']  # Different LUT than 'hot'
-                
-                # Create a black background
-                colored_mask = np.zeros((mask_array_temp.shape[0], mask_array_temp.shape[1], 4), dtype=np.float32)
-                
-                # Only color the cells (non-zero pixels)
-                mask_nonzero = mask_auto_contrast > 0
-                colored_mask[mask_nonzero] = cmap(mask_auto_contrast[mask_nonzero])
-                
-                # Convert to uint8 for display (only RGB channels)
-                colored_mask_rgb = (colored_mask[:, :, :3] * 255).astype(np.uint8)
+                # Use our custom Fire LUT for visualization
+                binary_mask = (mask_auto_contrast > 0).astype(np.uint8)
+                colored_mask_rgb = apply_fire_lut_to_binary(binary_mask)
 
                 # Display the colored mask with black background
-                st.image(colored_mask_rgb, caption="Segmentation Mask (Plasma LUT)", use_container_width=True)
+                st.image(colored_mask_rgb, caption="Segmentation Mask (Fire LUT)", use_container_width=True)
 
                 # Convert to numpy array for processing
                 mask_array = np.array(mask)

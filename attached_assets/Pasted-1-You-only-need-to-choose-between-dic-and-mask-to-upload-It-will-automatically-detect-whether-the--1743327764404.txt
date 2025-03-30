@@ -1,0 +1,143 @@
+1. You only need to choose between dic and mask to upload. It will automatically detect whether the uploaded image is dic or mask. You can distinguish them by comparing their metadata. Here is the metadata of dic:
+ImageDescription: <MetaData>
+<prop id="Description" type="string" value="Exposure: 100 ms&#13;&#10;Binning: 1 x 1&#13;&#10;Region: 1344 x 1024, offset at (0, 0)&#13;&#10;Subtract: Off&#13;&#10;Shading: Off&#13;&#10;Digitizer: High-precision&#13;&#10;Gain: 2&#13;&#10;Bit Depth: 12-bit&#13;&#10;Light Mode: Low&#13;&#10;Offset: 0&#13;&#10;Cooler On: 1&#13;&#10;Frames to Average: 1&#13;&#10;Trigger Mode: Internal&#13;&#10;Number of trigger times: 1&#13;&#10;Output Trigger Delay: -0 msec&#13;&#10;Output Trigger Width: 1.00001 msec&#13;&#10;"/>
+<prop id="MetaDataVersion" type="float" value="1"/>
+<prop id="ApplicationName" type="string" value="MetaMorph"/>
+<prop id="ApplicationVersion" type="string" value="7.8.10.0"/>
+<PlaneInfo>
+<prop id="plane-type" type="string" value="plane"/>
+<prop id="pixel-size-x" type="int" value="1344"/>
+<prop id="pixel-size-y" type="int" value="1024"/>
+<prop id="bits-per-pixel" type="int" value="16"/>
+<prop id="autoscale-state" type="bool" value="on"/>
+<prop id="autoscale-min-percent" type="float" value="0.05"/>
+<prop id="autoscale-max-percent" type="float" value="0.05"/>
+<prop id="scale-min" type="int" value="1073"/>
+<prop id="scale-max" type="int" value="1682"/>
+<prop id="spatial-calibration-state" type="bool" value="on"/>
+<prop id="spatial-calibration-x" type="float" value="1"/>
+<prop id="spatial-calibration-y" type="float" value="1"/>
+<prop id="spatial-calibration-units" type="string" value="pixel"/>
+<prop id="image-name" type="string" value="Acquired"/>
+<prop id="threshold-state" type="string" value="ThresholdOff"/>
+<prop id="threshold-low" type="int" value="0"/>
+<prop id="threshold-high" type="int" value="65535"/>
+<prop id="threshold-color" type="colorref" value="4080ff"/>
+<prop id="zoom-percent" type="int" value="70"/>
+<prop id="gamma" type="float" value="1"/>
+<prop id="look-up-table-type" type="string" value="by-wavelength"/>
+<prop id="look-up-table-name" type="string" value="Set By Wavelength"/>
+<prop id="photonegative-mode" type="bool" value="off"/>
+<prop id="gray-calibration-curve-fit-algorithm" type="int" value="4"/>
+<prop id="gray-calibration-values" type="float-array" value=""/>
+<prop id="gray-calibration-min" type="float" value="-1"/>
+<prop id="gray-calibration-max" type="float" value="-1"/>
+<prop id="gray-calibration-units" type="string" value=""/>
+<prop id="plane-guid" type="guid" value="{24641BC6-6D05-4374-BF32-F9A0A742A6A1}"/>
+<prop id="acquisition-time-local" type="time" value="20191018 12:24:36.33"/>
+<prop id="modification-time-local" type="time" value="20191018 12:24:58.899"/>
+<prop id="stage-position-x" type="float" value="2267.06"/>
+<prop id="stage-position-y" type="float" value="-9275.96"/>
+<prop id="stage-label" type="string" value="S1"/>
+<prop id="z-position" type="float" value="-50.39"/>
+<prop id="wavelength" type="float" value="0"/>
+<prop id="camera-binning-x" type="int" value="1"/>
+<prop id="camera-binning-y" type="int" value="1"/>
+<prop id="camera-chip-offset-x" type="float" value="0"/>
+<prop id="camera-chip-offset-y" type="float" value="0"/>
+<prop id="_IllumSetting_" type="string" value="DICT"/>
+<prop id="_MagNA_" type="float" value="0.5"/>
+<prop id="_MagRI_" type="float" value="1"/>
+<prop id="_MagSetting_" type="string" value="100XO DIC"/>
+<custom-prop id="Camera Bit Depth" type="float" value="12"/>
+<custom-prop id="Exposure Time" type="string" value="100 ms"/>
+<custom-prop id="Lumencor Intensity" type="float" value="255"/>
+<custom-prop id="Lumencor Shutter" type="string" value="Closed"/>
+<custom-prop id="MicroColor RGB Filter" type="string" value="Red"/>
+<custom-prop id="MicroColor RGB Shutter" type="string" value="Closed"/>
+<custom-prop id="Olympus Aperture Stop" type="float" value="100"/>
+<custom-prop id="Olympus DIA2 Light Level" type="float" value="29.8039"/>
+<custom-prop id="Olympus DIA2 Shutter" type="string" value="Open"/>
+<custom-prop id="Olympus Field Stop" type="float" value="91.877"/>
+<custom-prop id="Olympus Fluor Shutter" type="string" value="Closed"/>
+<custom-prop id="Olympus LED Light Level" type="float" value="100"/>
+<custom-prop id="Olympus LED Shutter" type="string" value="Closed"/>
+<custom-prop id="Olympus Mirror Unit 1" type="string" value="NONE"/>
+<custom-prop id="Olympus Objective" type="string" value="UPLSAPO100XO"/>
+<custom-prop id="Olympus Observation Method" type="string" value="Fluorescence"/>
+<custom-prop id="Olympus Polarizer" type="string" value="In"/>
+<custom-prop id="Olympus Top Lens" type="string" value="In"/>
+<custom-prop id="Olympus Trans Shutter" type="string" value="Open"/>
+<custom-prop id="Xcite Intensity" type="string" value="0%"/>
+<custom-prop id="Xcite Shutter" type="string" value="Closed"/>
+</PlaneInfo>
+<SetInfo>
+<prop id="number-of-planes" type="int" value="1"/>
+</SetInfo>
+</MetaData>
+
+Software: MetaSeries
+DateTime: 20191018 12:24:36.33
+--------------------------------------------
+(Fiji Is Just) ImageJ 2.16.0/1.54p; Java 1.8.0_322 [64-bit]; Mac OS X 10.16; 236MB of 5216MB (4%)
+ 
+Title: WT+pWL74 CLB2_Q570 MS2v6_Q670_1_DIC_s1.TIF
+Width:  1344 pixels
+Height:  1024 pixels
+Size:  2.6MB
+Pixel size: 1x1 pixel^2
+ID: -4
+Bits per pixel: 16 (unsigned, grayscale LUT)
+Display range: 958-1785
+Pixel value range: 958-1785
+No threshold
+Magnification: 0.50
+ScaleToFit: false
+Uncalibrated
+Path: /Users/zhaoyonghao/Documents/MATLAB/DIC/WT+pWL74 CLB2_Q570 MS2v6_Q670_1_DIC_s1.TIF
+Screen location: 5,89 (1280x720)
+SetMenuBarCount: 6 (243ms)
+No properties
+No overlay
+No selection
+mask metadata：ImageDescription: {"shape": [1024, 1344]}
+Software: tifffile.py
+--------------------------------------------
+(Fiji Is Just) ImageJ 2.16.0/1.54p; Java 1.8.0_322 [64-bit]; Mac OS X 10.16; 269MB of 5216MB (5%)
+ 
+Title: WT+pWL74 CLB2_Q570 MS2v6_Q670_1_DIC_s1.tif
+Width:  1344   (1344)
+Height:  1024   (1024)
+Size:  5.2MB
+Resolution:  1 pixels per  
+Pixel size: 1x1  ^2
+ID: -5
+Bits per pixel: 32 (float, grayscale LUT)
+Display range: 0 - 35
+Pixel value range: 0 - 35
+No threshold
+Magnification: 0.50
+ScaleToFit: false
+Uncalibrated
+Path: /Users/zhaoyonghao/Documents/MATLAB/DIC_mask/WT+pWL74 CLB2_Q570 MS2v6_Q670_1_DIC_s1.tif
+Screen location: 5,89 (1280x720)
+SetMenuBarCount: 8 (234ms)
+No properties
+No overlay
+No selection
+
+currently when upload mask, it showscv2.error: OpenCV(4.11.0) :-1: error: (-5:Bad argument) in function 'threshold' > Overload resolution failed: > - src data type = uint32 is not supported > - Expected Ptr<cv::UMat> for argument 'src'
+Traceback:
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 121, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 593, in code_to_exec
+    exec(code, module.__dict__)
+File "/home/runner/workspace/app.py", line 24, in <module>
+    page.app()
+File "/home/runner/workspace/image_alignment.py", line 78, in app
+    _, mask_binary = cv2.threshold(mask_array, 1, 255, cv2.THRESH_BINARY)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2. If it is dic, use auto contrast/brightness processing, if it is mask, use 3-3-2 RGB LUT processing
+
+3. Overlay interface, appropriately reduce, the current range is too large, in addition, you can create an interactive overlay, such as input up, down, left, right keys or wasd to fine-tune the offset. You can use some existing image frameworks instead of writing from scratch. Of course, you can also write from scratch, but you must ensure the effect
