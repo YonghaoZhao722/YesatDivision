@@ -189,14 +189,14 @@ def app():
         col1, col2 = st.columns(2)
         with col1:
             x_shift = st.slider("Shift X (horizontal)", 
-                              -min(width//4, 100), 
-                              min(width//4, 100), 
+                              float(-min(width//4, 100)), 
+                              float(min(width//4, 100)), 
                               float(st.session_state.x_shift),
                               step=0.1)
         with col2:
             y_shift = st.slider("Shift Y (vertical)", 
-                              -min(height//4, 100), 
-                              min(height//4, 100), 
+                              float(-min(height//4, 100)), 
+                              float(min(height//4, 100)), 
                               float(st.session_state.y_shift),
                               step=0.1)
         
