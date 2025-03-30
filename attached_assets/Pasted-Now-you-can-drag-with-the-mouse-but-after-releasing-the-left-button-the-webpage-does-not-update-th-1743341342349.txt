@@ -1,0 +1,75 @@
+Now you can drag with the mouse, but after releasing the left button, the webpage does not update the corresponding offset. I hope to update so that I can see the offset
+If you have implemented the mouse dragging function, but the webpage does not update the corresponding offset after releasing the left button, it may be because the position of the image is updated during the dragging process (for example, through CSS), but the final offset is not persisted to the state, or the state is not correctly reflected in the UI after the update. Here are the ideas and methods for updating and displaying the offset after releasing the mouse:
+
+### 1. Problem Analysis
+- **Current situation**: The image style (such as `top` and `left`) may be modified in real time through event listening during dragging, but after releasing the mouse, the React state is not updated synchronously, or the UI is not bound to the state.
+- **Goal**: When the mouse is released (`onMouseUp`), save the final offset to the state and display it on the page.
+
+### 2. Implementation ideas
+- **State management**:
+- Use React's `useState` to save the offset (x and y coordinates) of each image.
+- Update the state in real time while dragging, and the state is the latest value after releasing the mouse.
+- **Drag logic**:
+- Calculate the offset and update the state in `onMouseMove`.
+- End dragging in `onMouseUp` to ensure that the state has been updated.
+- **Display offset**:
+- Bind the state value in the UI (for example, display x and y through `<span>` or `<input>`).
+- Because the state has been updated, the offset will be automatically displayed after releasing the mouse.
+
+### 3. Recommended method
+#### Manually implement dragging and offset updates
+- **Steps**:
+1. **Define state**:
+- Define offset state for each image, for example `const [offset1, setOffset1] = useState({ x: 0, y: 0 });`.
+2. **Bind events**:
+- Add `onMouseDown` to the image to start dragging.
+- Add `onMouseMove` and `onMouseUp` to `document` (not the image itself) to ensure that the dragging range is not limited.
+3. **Real-time update**:
+- Calculate the mouse movement distance in `onMouseMove` and update the state.
+- Use `e.clientX` and `e.clientY` to get the mouse position, and calculate the offset based on the initial position.
+4. **End drag**:
+- Remove event listeners in `onMouseUp`, and the state is the final value.
+5. **Show offset**:
+- Render the state value in JSX, such as `<p>Offset: x: {offset1.x}, y: {offset1.y}</p>`.
+- **Key points**:
+- Use `useRef` to store the mouse position and initial offset when the drag starts to avoid problems caused by frequent state updates.
+- Make sure the state is synchronized after `onMouseUp`.
+
+#### Using react-draggable
+- If you use `react-draggable`, it has built-in position management:
+- **Steps**:
+1. Use the `onStop` callback to get the final position when the drag ends.
+2. Update the position to the state.
+3. Display the state value in the UI.
+- **Configuration**:
+- Set `onStop={(e, data) => setOffset({ x: data.x, y: data.y })}` of `<Draggable>`, `data.x` and `data.y` are the positions after dragging.
+- Use state to bind image position and display value.
+
+### 4. Solve the problem of not updating after releasing
+- **Checkpoint**:
+- **Is state updated**: Is `setOffset` called correctly in `onMouseMove`.
+- **Event removal**: Is `onMouseMove` listener removed correctly in `onMouseUp`.
+- **UI binding**: Is the element showing the offset bound to the state.
+- **Repair suggestion**:
+- If DOM is directly manipulated (such as `img.style.left`), change to control the style through state (`style={{ left: offset.x, top: offset.y }}`).
+- Use `useEffect` to debug state changes and ensure that the state is updated when releasing.
+
+### 5. Example process (manual implementation)
+1. **State and reference**:
+- `const [offset, setOffset] = useState({ x: 0, y: 0 });`
+- `const dragRef = useRef({ startX: 0, startY: 0 });`
+2. **Start dragging**:
+- `onMouseDown`: Record the initial mouse position and add a global listener.
+3. **Drag**:
+- `onMouseMove`: Calculate the new offset and update the state.
+4. **End drag**:
+- `onMouseUp`: Remove the listener and the state is the final value.
+5. **Display**:
+- `<div>Offset: ({offset.x}, {offset.y})</div>`.
+
+### 6. Notes
+- **Unit**: Make sure the offset unit is consistent with CSS (e.g. pixel `px`).
+- **Performance**: If frequent dragging causes lag, use `requestAnimationFrame` to optimize.
+- **Debug**: `console.log(offset)` in `onMouseUp` to confirm whether the state is correct.
+
+With the above method, after releasing the mouse, the offset will be updated to the state and displayed on the page. If using `react-draggable`, it is simpler to use its callback directly; if implemented manually, just make sure the state and UI binding are consistent.

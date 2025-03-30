@@ -7,6 +7,7 @@ import io
 import os
 import tifffile
 import base64
+import time
 from utils import auto_contrast, apply_fire_lut_to_binary
 
 def app():
@@ -353,6 +354,12 @@ def app():
             overlay_pil.save(overlay_buffer, format="PNG")
             overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
             
+            # Component key for forcing re-renders when state changes
+            component_key = f"overlay_{id(fluo_array)}_{id(dic_array)}_{x_shift}_{y_shift}_{overlay_opacity}"
+            
+            # Create placeholder for displaying the received coordinates
+            coordinates_placeholder = st.empty()
+            
             # Create a client-side JavaScript implementation with cached images
             # This enables dragging directly in the browser for better responsiveness
             html = f"""
@@ -416,6 +423,21 @@ def app():
                     #position-display {{
                         margin-top: 8px;
                         font-weight: bold;
+                        color: #ff4b4b;
+                    }}
+                    
+                    #save-btn {{
+                        margin-top: 10px;
+                        background-color: #4CAF50 !important;
+                        color: white;
+                        font-weight: bold;
+                        padding: 6px 12px !important;
+                    }}
+                    
+                    #save-message {{
+                        margin-top: 5px;
+                        color: #4CAF50;
+                        display: none;
                     }}
                 </style>
             </head>
@@ -436,6 +458,10 @@ def app():
                         <button id="down-btn" title="Move Down (0.1 pixel)">⬇️</button>
                         <button id="right-btn" title="Move Right (0.1 pixel)">➡️</button>
                     </div>
+                    <div style="margin-top: 10px;">
+                        <button id="save-btn">Update Streamlit State</button>
+                        <div id="save-message">Position saved to Streamlit!</div>
+                    </div>
                 </div>
 
                 <script>
@@ -444,11 +470,14 @@ def app():
                     let startX, startY, initialXOffset, initialYOffset;
                     let currentXOffset = {x_shift};
                     let currentYOffset = {y_shift};
+                    let stateIsSynced = true;
                     
                     // Get overlay image and container elements
                     const overlayImage = document.getElementById('overlay-image');
                     const container = document.getElementById('overlay-container');
                     const positionDisplay = document.getElementById('position-display');
+                    const saveButton = document.getElementById('save-btn');
+                    const saveMessage = document.getElementById('save-message');
                     
                     // Initialize position display
                     updatePositionDisplay();
@@ -469,6 +498,7 @@ def app():
                     document.getElementById('right-btn').addEventListener('click', () => adjustPosition(0.1, 0));
                     document.getElementById('up-btn').addEventListener('click', () => adjustPosition(0, -0.1));
                     document.getElementById('down-btn').addEventListener('click', () => adjustPosition(0, 0.1));
+                    saveButton.addEventListener('click', syncWithStreamlit);
                     
                     // Function to start dragging
                     function startDrag(e) {{
@@ -523,6 +553,12 @@ def app():
                         
                         // Update position display
                         updatePositionDisplay();
+                        
+                        // Mark state as not synced with Streamlit
+                        if (stateIsSynced) {{
+                            stateIsSynced = false;
+                            positionDisplay.style.color = '#ff4b4b'; // Red to indicate not saved
+                        }}
                     }}
                     
                     // Function to end dragging
@@ -533,9 +569,6 @@ def app():
                         
                         // Reset cursor
                         container.style.cursor = 'default';
-                        
-                        // Send position data to Streamlit
-                        sendDataToStreamlit();
                     }}
                     
                     // Function to update image position
@@ -554,7 +587,7 @@ def app():
                         currentYOffset = 0;
                         updatePosition(0, 0);
                         updatePositionDisplay();
-                        sendDataToStreamlit();
+                        syncWithStreamlit();
                     }}
                     
                     // Function for fine adjustments
@@ -563,7 +596,8 @@ def app():
                         currentYOffset += dy;
                         updatePosition(currentXOffset, currentYOffset);
                         updatePositionDisplay();
-                        sendDataToStreamlit();
+                        stateIsSynced = false;
+                        positionDisplay.style.color = '#ff4b4b'; // Red to indicate not saved
                     }}
                     
                     // Update position display
@@ -571,38 +605,59 @@ def app():
                         positionDisplay.textContent = `X: ${{currentXOffset.toFixed(1)}}, Y: ${{currentYOffset.toFixed(1)}} pixels`;
                     }}
                     
-                    // Function to send data back to Streamlit
-                    function sendDataToStreamlit() {{
+                    // Function to sync with Streamlit
+                    function syncWithStreamlit() {{
                         if (window.parent && window.parent.postMessage) {{
                             const message = {{
-                                type: 'position_data',
-                                x: currentXOffset,
-                                y: currentYOffset
+                                type: 'streamlit:setComponentValue',
+                                data: {{
+                                    x: parseFloat(currentXOffset.toFixed(1)),
+                                    y: parseFloat(currentYOffset.toFixed(1))
+                                }}
                             }};
                             
-                            window.parent.postMessage(JSON.stringify(message), '*');
+                            window.parent.postMessage(message, '*');
+                            
+                            // Update UI to indicate synced state
+                            stateIsSynced = true;
+                            positionDisplay.style.color = '#4CAF50'; // Green to indicate saved
+                            
+                            // Show saved message
+                            saveMessage.style.display = 'block';
+                            setTimeout(() => {{
+                                saveMessage.style.display = 'none';
+                            }}, 2000);
                         }}
                     }}
                     
                     // Custom event listeners for Streamlit communications
                     window.addEventListener('message', function(event) {{
                         try {{
-                            const data = JSON.parse(event.data);
+                            const data = event.data;
+                            
+                            // Handle Streamlit messages
+                            if (data.type === 'streamlit:componentReady') {{
+                                // Component is ready to receive messages
+                                console.log('Component is ready');
+                            }}
                             
                             // Handle position updates from sliders
-                            if (data.type === 'position_update') {{
+                            if (data.x !== undefined && data.y !== undefined) {{
                                 currentXOffset = data.x;
                                 currentYOffset = data.y;
                                 updatePosition(data.x, data.y);
                                 updatePositionDisplay();
+                                stateIsSynced = true;
+                                positionDisplay.style.color = '#4CAF50'; // Green
                             }}
                             
                             // Handle opacity updates
-                            if (data.type === 'opacity_update') {{
+                            if (data.opacity !== undefined) {{
                                 updateOpacity(data.opacity);
                             }}
                         }} catch (e) {{
-                            // Non-JSON messages are ignored
+                            // Non-JSON or invalid messages are ignored
+                            console.log('Error processing message:', e);
                         }}
                     }});
                 </script>
@@ -610,16 +665,38 @@ def app():
             </html>
             """
             
-            # Use a fixed height component instead of responsive for better control
-            st.components.v1.html(html, height=img_height+20, scrolling=False)
+            # Use a custom component instead of plain HTML for better state management
+            component_value = st.components.v1.html(
+                html, 
+                height=img_height+150,  # Add more space for the controls
+                scrolling=False,
+                key=component_key
+            )
             
-            # Hidden data to trigger JS updates without reloading the component
-            # This gives the appearance of the image moving without server requests
+            # Check if we received a value back from the component
+            if component_value is not None:
+                try:
+                    # Update the session state
+                    if 'x' in component_value and 'y' in component_value:
+                        st.session_state.x_shift = component_value['x']
+                        st.session_state.y_shift = component_value['y']
+                        
+                        # Display the updated values
+                        coordinates_placeholder.info(f"Synchronized offset values: X={st.session_state.x_shift}, Y={st.session_state.y_shift}")
+                        
+                        # Wait a moment, then rerun to update the sliders to match
+                        time.sleep(0.1)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error updating coordinates: {e}")
+                    st.error(f"Value received: {component_value}")
+            
+            # Add hidden indicator for the component to detect when state has changed
             st.markdown(
                 f"""
-                <div id="data-values" 
+                <div id="streamlit-state" 
                     data-x="{x_shift}" 
-                    data-y="{y_shift}" 
+                    data-y="{y_shift}"
                     data-opacity="{overlay_opacity/100}"
                     style="display: none;">
                 </div>
