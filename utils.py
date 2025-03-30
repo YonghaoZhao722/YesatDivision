@@ -34,10 +34,10 @@ def create_fire_lut():
     # Note: This gradient colormap is mainly for visualization in plots.
     # For mask overlays, we use the simplified 3-3-2 RGB mapping in apply_fire_lut_to_binary()
 
-# Create a simplified 3-3-2 RGB "Fire" LUT for binary masks
+# Create a proper RGB "Fire" LUT for binary masks
 def apply_fire_lut_to_binary(binary_mask):
     """
-    Apply a simplified 3-3-2 RGB "Fire" LUT to binary mask.
+    Apply a proper RGB "Fire" LUT to binary mask, matching ImageJ/Fiji's Fire LUT.
     
     Parameters:
     -----------
@@ -50,17 +50,42 @@ def apply_fire_lut_to_binary(binary_mask):
         RGB image with Fire LUT applied
     """
     h, w = binary_mask.shape[:2]
+    
+    # Create a proper Fire LUT (256 color entries)
+    # This matches Fiji's Fire LUT more accurately
+    fire_lut = np.zeros((256, 3), dtype=np.uint8)
+    
+    # Fill the Fire LUT with gradient colors
+    # First third: black to red
+    for i in range(85):
+        fire_lut[i, 0] = min(255, i * 3)  # Red increases
+    
+    # Middle third: red to yellow
+    for i in range(85, 170):
+        idx = i - 85
+        fire_lut[i, 0] = 255  # Red stays max
+        fire_lut[i, 1] = min(255, idx * 3)  # Green increases
+    
+    # Final third: yellow to white
+    for i in range(170, 256):
+        idx = i - 170
+        fire_lut[i, 0] = 255  # Red stays max
+        fire_lut[i, 1] = 255  # Green stays max
+        fire_lut[i, 2] = min(255, idx * 3)  # Blue increases
+    
+    # Apply LUT to mask
+    # First, convert binary mask to 0-255 range
+    # Foreground (mask==1) is set to 255 for maximum intensity
+    mask_intensity = (binary_mask > 0).astype(np.uint8) * 255
+    
+    # Create RGB output
     colored_mask = np.zeros((h, w, 3), dtype=np.uint8)
     
-    # Apply a custom 3-3-2 RGB LUT (similar to "fire" in ImageJ)
-    # Red channel (3 bits - full intensity for high visibility)
-    colored_mask[:,:,0] = (binary_mask > 0) * 255  # R: 255
-    
-    # Green channel (3 bits - slightly reduced for orange-yellow tint)
-    colored_mask[:,:,1] = (binary_mask > 0) * 210  # G: 210
-    
-    # Blue channel (2 bits - lowest value for warm orange appearance)
-    colored_mask[:,:,2] = (binary_mask > 0) * 150  # B: 150
+    # Apply the LUT
+    for y in range(h):
+        for x in range(w):
+            if mask_intensity[y, x] > 0:
+                colored_mask[y, x] = fire_lut[mask_intensity[y, x]]
     
     return colored_mask
 

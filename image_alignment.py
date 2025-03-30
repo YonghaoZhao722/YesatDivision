@@ -353,8 +353,9 @@ def app():
                 <style>
                     #overlay-container {{
                         position: relative;
-                        width: {img_width}px;
-                        height: {img_height}px;
+                        width: 100%;
+                        max-width: 800px;  /* Max width to prevent overly large displays */
+                        aspect-ratio: {img_width} / {img_height};  /* Maintain aspect ratio */
                         margin: 0 auto;
                         overflow: hidden;
                         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
@@ -366,8 +367,9 @@ def app():
                         position: absolute;
                         top: 0;
                         left: 0;
-                        width: {img_width}px;
-                        height: {img_height}px;
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;  /* Maintain aspect ratio */
                         z-index: 1;
                         pointer-events: none;
                     }}
@@ -376,8 +378,9 @@ def app():
                         position: absolute;
                         top: 0;
                         left: 0;
-                        width: {img_width}px;
-                        height: {img_height}px;
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;  /* Maintain aspect ratio */
                         opacity: {overlay_opacity/100};
                         z-index: 2;
                         cursor: move;
@@ -524,15 +527,20 @@ def app():
                             currentY = e.clientY;
                         }}
                         
-                        // Calculate new position
-                        const dx = currentX - startX;
-                        const dy = currentY - startY;
+                        // Calculate scale factor for responsive design
+                        const originalWidth = {img_width};
+                        const containerWidth = container.clientWidth;
+                        const scaleFactor = originalWidth / containerWidth;
                         
-                        // Update current offset
-                        currentXOffset = initialXOffset + dx;
-                        currentYOffset = initialYOffset + dy;
+                        // Calculate new position with scale adjustment
+                        const dx = (currentX - startX) * scaleFactor;
+                        const dy = (currentY - startY) * scaleFactor;
                         
-                        // Apply transform to image
+                        // Update current offset with fixed decimal precision (2 decimal places)
+                        currentXOffset = parseFloat((initialXOffset + dx).toFixed(2));
+                        currentYOffset = parseFloat((initialYOffset + dy).toFixed(2));
+                        
+                        // Apply transform to image with precise values
                         updatePosition(currentXOffset, currentYOffset);
                         
                         // Update position display
@@ -557,7 +565,16 @@ def app():
                     
                     // Function to update image position
                     function updatePosition(x, y) {{
-                        overlayImage.style.transform = `translate(${{x}}px, ${{y}}px)`;
+                        // Calculate scale factor for responsive design
+                        const originalWidth = {img_width};
+                        const containerWidth = container.clientWidth;
+                        const scaleFactor = containerWidth / originalWidth;
+                        
+                        // Apply scaled transform for responsive accuracy
+                        const scaledX = x * scaleFactor;
+                        const scaledY = y * scaleFactor;
+                        
+                        overlayImage.style.transform = `translate(${{scaledX}}px, ${{scaledY}}px)`;
                     }}
                     
                     // Function to update opacity
@@ -576,8 +593,9 @@ def app():
                     
                     // Function for fine adjustments
                     function adjustPosition(dx, dy) {{
-                        currentXOffset += dx;
-                        currentYOffset += dy;
+                        // Update with precise decimal control (2 decimal places)
+                        currentXOffset = parseFloat((currentXOffset + dx).toFixed(2));
+                        currentYOffset = parseFloat((currentYOffset + dy).toFixed(2));
                         updatePosition(currentXOffset, currentYOffset);
                         updatePositionDisplay();
                         stateIsSynced = false;
@@ -681,15 +699,29 @@ def app():
                             console.log('Error processing message:', e);
                         }}
                     }});
+                    
+                    // Handle window resize events to maintain responsive behavior
+                    let resizeTimeout;
+                    window.addEventListener('resize', function() {{
+                        // Debounce the resize event
+                        clearTimeout(resizeTimeout);
+                        resizeTimeout = setTimeout(function() {{
+                            // Update position after resize is complete
+                            updatePosition(currentXOffset, currentYOffset);
+                        }}, 100);
+                    }});
                 </script>
             </body>
             </html>
             """
             
-        # Use HTML component for display
+        # Use HTML component for display with responsive height
+        # Calculate a reasonable height based on aspect ratio but with a minimum
+        responsive_height = min(650, img_height+150)  # Cap at 650px for very tall images
+        
         st.components.v1.html(
             html, 
-            height=img_height+150,  # Add more space for the controls
+            height=responsive_height,
             scrolling=False
         )
             
