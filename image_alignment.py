@@ -309,6 +309,10 @@ def app():
             src_image = dic_array
             # Convert to RGB if needed
             if len(src_image.shape) == 2:
+                # Handle uint32 which is not supported by cvtColor
+                if src_image.dtype == np.uint32 or src_image.dtype == np.int32:
+                    # Convert to uint8 first
+                    src_image = (src_image > 0).astype(np.uint8) * 255
                 src_image = cv2.cvtColor(src_image, cv2.COLOR_GRAY2RGB)
         
         # Ensure fluorescence image is RGB for overlay
