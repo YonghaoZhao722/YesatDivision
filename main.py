@@ -397,7 +397,8 @@ def app():
 
             # Download option for the visualization
             buf = io.BytesIO()
-            plt.imsave(buf, st.session_state.visualization)
+            # Use PIL to save the image as it's more reliable with different image formats
+            Image.fromarray(st.session_state.visualization).save(buf, format="PNG")
             buf.seek(0)
 
             st.download_button(

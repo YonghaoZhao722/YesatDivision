@@ -234,6 +234,30 @@ def app():
         # Apply the shift to the DIC/mask image
         shifted_image = cv2.warpAffine(src_image, M, (width, height))
         
+        # Ensure both images have the same dtype and channel count
+        # Convert both to uint8 RGB format
+        if shifted_image.dtype != np.uint8:
+            shifted_image = (shifted_image * 255).astype(np.uint8) if shifted_image.max() <= 1.0 else shifted_image.astype(np.uint8)
+        
+        if fluo_rgb.dtype != np.uint8:
+            fluo_rgb = (fluo_rgb * 255).astype(np.uint8) if fluo_rgb.max() <= 1.0 else fluo_rgb.astype(np.uint8)
+            
+        # Ensure both have 3 channels (RGB)
+        if len(shifted_image.shape) == 2:
+            shifted_image = cv2.cvtColor(shifted_image, cv2.COLOR_GRAY2RGB)
+        elif shifted_image.shape[2] > 3:
+            shifted_image = shifted_image[:,:,:3]
+            
+        if len(fluo_rgb.shape) == 2:
+            fluo_rgb = cv2.cvtColor(fluo_rgb, cv2.COLOR_GRAY2RGB)
+        elif fluo_rgb.shape[2] > 3:
+            fluo_rgb = fluo_rgb[:,:,:3]
+        
+        # Ensure both images have the same dimensions
+        if shifted_image.shape[:2] != fluo_rgb.shape[:2]:
+            # Resize to match the first image dimensions
+            fluo_rgb = cv2.resize(fluo_rgb, (shifted_image.shape[1], shifted_image.shape[0]))
+        
         # Create overlay
         alpha = overlay_opacity / 100.0
         overlay = cv2.addWeighted(shifted_image, alpha, fluo_rgb, 1.0 - alpha, 0)
@@ -246,7 +270,8 @@ def app():
         
         # Add download button for the aligned overlay
         buf = io.BytesIO()
-        plt.imsave(buf, overlay)
+        # Use PIL to save the image as it's more reliable with different image formats
+        Image.fromarray(overlay).save(buf, format="PNG")
         buf.seek(0)
         
         st.download_button(
