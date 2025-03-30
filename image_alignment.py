@@ -180,14 +180,23 @@ def app():
         height, width = dic_array.shape[:2]
         
         # Check if we have URL parameters with coordinates
-        query_params = st.experimental_get_query_params()
+        query_params = st.query_params
         
         # Initialize session state for fine adjustment
         if 'x_shift' not in st.session_state:
             # Check if we have URL parameters first
             if 'x_shift' in query_params:
                 try:
-                    st.session_state.x_shift = float(query_params['x_shift'][0])
+                    # Extract value from the query parameter
+                    x_param = query_params['x_shift']
+                    # Convert to float if it's a string
+                    if isinstance(x_param, str):
+                        st.session_state.x_shift = float(x_param)
+                    # If it's a list (old format), take first item
+                    elif isinstance(x_param, list) and len(x_param) > 0:
+                        st.session_state.x_shift = float(x_param[0])
+                    else:
+                        st.session_state.x_shift = 0
                 except:
                     st.session_state.x_shift = 0
             else:
@@ -197,7 +206,16 @@ def app():
             # Check if we have URL parameters first
             if 'y_shift' in query_params:
                 try:
-                    st.session_state.y_shift = float(query_params['y_shift'][0])
+                    # Extract value from the query parameter
+                    y_param = query_params['y_shift']
+                    # Convert to float if it's a string
+                    if isinstance(y_param, str):
+                        st.session_state.y_shift = float(y_param)
+                    # If it's a list (old format), take first item
+                    elif isinstance(y_param, list) and len(y_param) > 0:
+                        st.session_state.y_shift = float(y_param[0])
+                    else:
+                        st.session_state.y_shift = 0
                 except:
                     st.session_state.y_shift = 0
             else:
@@ -722,29 +740,45 @@ def app():
             """
             
             # Use HTML component for display
-            component_value = st.components.v1.html(
+            st.components.v1.html(
                 html, 
                 height=img_height+150,  # Add more space for the controls
                 scrolling=False
             )
             
-            # Check if we received a value back from the component
-            if component_value is not None:
+            # Check URL parameters for button clicks
+            if 'x_shift' in st.query_params and 'y_shift' in st.query_params:
                 try:
-                    # Update the session state
-                    if 'x' in component_value and 'y' in component_value:
-                        st.session_state.x_shift = component_value['x']
-                        st.session_state.y_shift = component_value['y']
+                    # Get values from URL parameters
+                    x_param = st.query_params['x_shift']
+                    y_param = st.query_params['y_shift']
+                    
+                    # Parse values
+                    new_x = float(x_param) if isinstance(x_param, str) else float(x_param[0])
+                    new_y = float(y_param) if isinstance(y_param, str) else float(y_param[0])
+                    
+                    # Update session state only if values have changed
+                    if abs(st.session_state.x_shift - new_x) > 0.01 or abs(st.session_state.y_shift - new_y) > 0.01:
+                        st.session_state.x_shift = new_x
+                        st.session_state.y_shift = new_y
                         
                         # Display the updated values
-                        coordinates_placeholder.info(f"Synchronized offset values: X={st.session_state.x_shift}, Y={st.session_state.y_shift}")
+                        coordinates_placeholder.info(f"Synchronized offset values: X={st.session_state.x_shift:.1f}, Y={st.session_state.y_shift:.1f}")
                         
-                        # Wait a moment, then rerun to update the sliders to match
+                        # Wait a moment, then rerun to update the sliders to match (with clean URL)
                         time.sleep(0.1)
+                        # Clear URL parameters
+                        new_params = st.query_params.copy()
+                        if 'x_shift' in new_params:
+                            del new_params['x_shift']
+                        if 'y_shift' in new_params:
+                            del new_params['y_shift']
+                        st.query_params.update(new_params)
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error updating coordinates: {e}")
-                    st.error(f"Value received: {component_value}")
+                    # Use safe logging
+                    st.error(f"Parameters: x_shift={st.query_params.get('x_shift', 'N/A')}, y_shift={st.query_params.get('y_shift', 'N/A')}")
             
             # Add hidden indicator for the component to detect when state has changed
             st.markdown(
