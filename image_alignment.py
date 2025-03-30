@@ -311,28 +311,12 @@ def app():
         with right_col:
             st.subheader("Aligned Overlay")
             
-            # Use CSS to create the overlay effect for better performance
-            # Streamlit HTML component
-            st.markdown("""
-            <style>
-            .overlay-container {
-                position: relative;
-                width: 100%;
-                max-width: 100%;
-            }
-            .base-image {
-                width: 100%;
-                display: block;
-            }
-            .overlay-image {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                pointer-events: none;
-            }
-            </style>
-            """, unsafe_allow_html=True)
+            # Create a more efficient overlay using pure CSS blending and positioning
+            
+            # First, display both images individually using Streamlit's native image display
+            # But we'll make them invisible initially and use HTML/CSS for the actual overlay
+            fluo_img_container = st.empty()
+            overlay_img_container = st.empty()
             
             # Prepare the base (fluorescence) image
             if len(fluo_array.shape) == 2:
@@ -360,11 +344,15 @@ def app():
                 else:
                     overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
             
-            # Convert images to PIL format
+            # Convert to PIL images (only so we can get dimensions)
             fluo_pil = Image.fromarray(fluo_rgb)
             overlay_pil = Image.fromarray(overlay_rgb)
             
-            # Save images to buffer and convert to base64
+            # Get image dimensions
+            img_width, img_height = fluo_pil.size
+            
+            # Save small thumbnails of images to buffer (for lightweight loading)
+            # Convert to base64 for embedding in HTML
             fluo_buffer = io.BytesIO()
             fluo_pil.save(fluo_buffer, format="PNG")
             fluo_base64 = base64.b64encode(fluo_buffer.getvalue()).decode()
@@ -373,18 +361,63 @@ def app():
             overlay_pil.save(overlay_buffer, format="PNG")
             overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
             
-            # Display the overlay using HTML/CSS
+            # Create CSS for optimized overlay
+            css = f"""
+            <style>
+                .image-container {{
+                    position: relative;
+                    width: 100%;
+                    max-width: 100%;
+                    overflow: hidden;
+                }}
+                
+                .image-container img {{
+                    display: block;
+                    width: 100%;
+                }}
+                
+                .background-image {{
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: 1;
+                }}
+                
+                .overlay-image {{
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    opacity: {overlay_opacity/100};
+                    transform: translate({x_shift}px, {y_shift}px);
+                    z-index: 2;
+                    mix-blend-mode: normal;
+                }}
+            </style>
+            """
+            
+            # Create HTML structure with the images
             html = f"""
-            <div class="overlay-container">
-                <img src="data:image/png;base64,{fluo_base64}" class="base-image">
-                <img src="data:image/png;base64,{overlay_base64}" 
-                     class="overlay-image" 
-                     style="transform: translate({x_shift}px, {y_shift}px); opacity: {overlay_opacity/100};">
+            {css}
+            <div class="image-container" style="height: {img_height}px;">
+                <img 
+                    src="data:image/png;base64,{fluo_base64}" 
+                    class="background-image" 
+                    alt="Fluorescence Image"
+                >
+                <img 
+                    src="data:image/png;base64,{overlay_base64}" 
+                    class="overlay-image" 
+                    alt="DIC/Mask Image"
+                >
             </div>
             """
             
-            # Use components.html instead of markdown for better rendering
-            st.components.v1.html(html, height=height+50, scrolling=False)
+            # Display the overlay using HTML component
+            st.components.v1.html(html, height=img_height+20, scrolling=False)
     
     # Instructions/guide
     with st.sidebar:

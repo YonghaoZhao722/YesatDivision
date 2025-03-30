@@ -1,0 +1,86 @@
+Wrong demonstration:
+Parameter + image 1 + image 2 = overlay
+Correct demonstration:
+Parameter + image 1 = image 1 displayed in the overlay area
+Parameter + image 2 = image 2 displayed in the overlay area
+Image 1 displayed in the overlay area + image 2 displayed in the overlay area = the effect displayed in the overlay area
+Implementation method
+
+CSS positioning and blending mode:
+
+Use absolute positioning to overlap two images in the same area
+Use CSS opacity property to control transparency
+Use CSS transform: translate(x, y) to achieve image offset
+You can use CSS blending modes (such as mix-blend-mode) to achieve more complex overlay effects
+
+Canvas API:
+
+Use HTML5 Canvas draws and overlays images
+Control transparency and position through JavaScript
+More complex image processing and transformations can be achieved
+
+React state management:
+
+Use React state to store and update transparency and offset parameters
+Re-render components when parameters change
+
+Possible plugins/frameworks
+
+Basic React:
+
+Use React's state and effect hooks to implement basic functions
+No special plugins are required to complete simple overlay effects
+
+Image processing library:
+
+react-image-overlay: React component specifically for image overlay
+react-konva: Canvas encapsulation library, which facilitates image manipulation using Canvas in React
+fab ric.js: Feature-rich Canvas operation library
+
+UI control components:
+
+react-slider or rc-slider: used to create sliders to control transparency
+
+react-draggable: allows users to adjust image offsets by dragging
+
+Overview of implementation steps
+
+Create a container component and set it to relative positioning
+
+Place two image components in the container and set it to absolute positioning
+Add states to each image component to control its transparency and position
+Add UI controls so that users can adjust these parameters
+When users adjust parameters, update the state in real time and re-render the image
+
+This method can achieve a completely real-time image overlay effect, and each parameter change will be immediately reflected in the display instead of generating a new composite image. Technology stack selection
+React: As a basic framework, it is used to build componentized image display areas.
+CSS: Used for basic positioning and overlay effects, especially using position: absolute or relative to achieve image stacking and offset.
+Canvas API or WebGL: Used for real-time rendering of image overlay effects, especially when dynamic adjustment of transparency or more complex image processing is required.
+2. Implementation ideas
+Component design:
+Create an ImageOverlay component to manage the display of two images.
+Use two subcomponents (such as ImageLayer1 and ImageLayer2) to handle the status of each image (offset, transparency, etc.).
+Image overlay:
+Use HTML <div> container as overlay area, which contains two <img> tags.
+Control transparency through CSS opacity property, and achieve real-time offset through transform: translate(x, y) or top/left properties.
+Real-time rendering:
+If more complex real-time effects are required (such as image fusion rather than simple overlay), you can use <canvas> element instead of <img>.
+Draw two images through the drawImage method of Canvas API, and set transparency with globalAlpha.
+If higher performance requirements or advanced effects (such as pixel-level blending) are required, you can consider WebGL (through Three.js or react-three-fiber).
+Parameter control:
+Use React's state management (useState or Redux) to dynamically update the transparency and offset parameters of each image.
+Use input controls (such as sliders) to let users adjust these parameters in real time, triggering component re-rendering.
+3. Recommended tools/frameworks
+CSS: Basic overlays and style adjustments without additional plugins.
+Canvas API: Native JavaScript API for simple real-time image processing.
+Konva.js: A library focused on 2D drawing that can be integrated with React (via react-konva) to facilitate the management of image layers and real-time operations.
+Three.js: If WebGL rendering is required, it provides more powerful image processing capabilities and integrates seamlessly with React with react-three-fiber.
+React Hooks: Use useState and useEffect to manage state and side effects to ensure real-time updates when parameters change.
+4. Methods and steps
+Prepare the overlay area: Define a container in the component and set relative positioning.
+Load two images: Place the images as separate layers in a container and bind parameters (such as opacity, offset) separately.
+Dynamically adjust parameters: Bind user input through React state and update the style of each image or Canvas drawing in real time.
+Choose a rendering method:
+If you only need a simple overlay, use CSS.
+If you need pixel-level control or complex effects, use Canvas or WebGL.
+Optimize performance: Use useMemo or useCallback to avoid unnecessary re-rendering, especially when using Canvas.
