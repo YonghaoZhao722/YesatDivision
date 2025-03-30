@@ -194,14 +194,14 @@ def app():
             
             # Create sliders for shifting with a smaller range for more precise control
             x_shift = st.slider("Shift X (horizontal)", 
-                            -min(width//4, 100), 
-                            min(width//4, 100), 
+                            float(-min(width//4, 100)), 
+                            float(min(width//4, 100)), 
                             float(st.session_state.x_shift),
                             step=0.1)
             
             y_shift = st.slider("Shift Y (vertical)", 
-                            -min(height//4, 100), 
-                            min(height//4, 100), 
+                            float(-min(height//4, 100)), 
+                            float(min(height//4, 100)), 
                             float(st.session_state.y_shift),
                             step=0.1)
             
