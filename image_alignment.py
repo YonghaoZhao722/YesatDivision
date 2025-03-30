@@ -331,13 +331,33 @@ def app():
         # Ensure both images have the same dtype and channel count
         # Convert both to uint8 RGB format
         if shifted_image.dtype != np.uint8:
-            shifted_image = (shifted_image * 255).astype(np.uint8) if shifted_image.max() <= 1.0 else shifted_image.astype(np.uint8)
+            # Handle various data types safely
+            if shifted_image.dtype == np.uint32 or shifted_image.dtype == np.int32:
+                # For uint32/int32, first convert to a format OpenCV can handle
+                shifted_image = (shifted_image > 0).astype(np.uint8) * 255
+            elif shifted_image.max() <= 1.0:
+                shifted_image = (shifted_image * 255).astype(np.uint8)
+            else:
+                # Scale down larger bit depths
+                if shifted_image.dtype == np.uint16:
+                    shifted_image = (shifted_image / 256).astype(np.uint8)
+                else:
+                    shifted_image = shifted_image.astype(np.uint8)
         
         if fluo_rgb.dtype != np.uint8:
-            fluo_rgb = (fluo_rgb * 255).astype(np.uint8) if fluo_rgb.max() <= 1.0 else fluo_rgb.astype(np.uint8)
+            if fluo_rgb.dtype == np.uint32 or fluo_rgb.dtype == np.int32:
+                fluo_rgb = (fluo_rgb > 0).astype(np.uint8) * 255
+            elif fluo_rgb.max() <= 1.0:
+                fluo_rgb = (fluo_rgb * 255).astype(np.uint8)
+            else:
+                if fluo_rgb.dtype == np.uint16:
+                    fluo_rgb = (fluo_rgb / 256).astype(np.uint8)
+                else:
+                    fluo_rgb = fluo_rgb.astype(np.uint8)
             
         # Ensure both have 3 channels (RGB)
         if len(shifted_image.shape) == 2:
+            # Convert to RGB, but ensure we're working with uint8 first
             shifted_image = cv2.cvtColor(shifted_image, cv2.COLOR_GRAY2RGB)
         elif shifted_image.shape[2] > 3:
             shifted_image = shifted_image[:,:,:3]
