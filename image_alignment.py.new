@@ -6,7 +6,6 @@ from PIL import Image
 import io
 import os
 import tifffile
-import base64
 from utils import auto_contrast, apply_fire_lut_to_binary
 
 def app():
@@ -252,6 +251,12 @@ def app():
                 help="Control the opacity of the DIC/mask overlay"
             )
             st.session_state.overlay_opacity = overlay_opacity
+            
+            # Default overlay type based on what was detected
+            if is_mask:
+                overlay_type = "Mask over Fluorescence" 
+            else:
+                overlay_type = "DIC over Fluorescence"
                 
             # Add download button for the overlay image
             if st.button("Generate Overlay for Download"):
@@ -262,12 +267,12 @@ def app():
                     
                     # Prepare fluorescence image
                     if len(fluo_array.shape) == 2:
-                        fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
-                        cmap = plt.cm.get_cmap('hot')
-                        fluo_colored = cmap(fluo_contrast)
-                        fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
+                        fluo_rgb = cv2.applyColorMap(
+                            (auto_contrast(fluo_array) * 255).astype(np.uint8), 
+                            cv2.COLORMAP_HOT
+                        )
                     else:
-                        fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
+                        fluo_rgb = auto_contrast(fluo_array)
                         if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
                             fluo_rgb = fluo_rgb[:, :, :3]
                     
@@ -276,24 +281,30 @@ def app():
                         # Create colored mask
                         if len(mask_array.shape) == 2:
                             mask_bin = (mask_array > 0).astype(np.uint8)
-                            overlay_rgb = apply_fire_lut_to_binary(mask_bin)
+                            mask_rgb = apply_fire_lut_to_binary(mask_bin)
                         else:
-                            overlay_rgb = mask_array
+                            mask_rgb = mask_array
+                        src_image = mask_rgb
                     else:
                         # Use DIC image
-                        if len(dic_array.shape) == 2:
-                            overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
-                        else:
-                            overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
+                        src_image = auto_contrast(dic_array)
+                        if len(src_image.shape) == 2:
+                            src_image = cv2.cvtColor(src_image, cv2.COLOR_GRAY2RGB)
                     
                     # Apply shift using affine transformation
                     M = np.float32([[1, 0, x_shift], [0, 1, y_shift]])
-                    shifted_overlay = cv2.warpAffine(overlay_rgb, M, (width, height))
+                    shifted_image = cv2.warpAffine(src_image, M, (width, height))
                     
-                    # Blend images
+                    # Ensure both images have the same format
+                    if shifted_image.dtype != np.uint8:
+                        shifted_image = (shifted_image * 255).astype(np.uint8)
+                    if fluo_rgb.dtype != np.uint8:
+                        fluo_rgb = (fluo_rgb * 255).astype(np.uint8)
+                    
+                    # Create overlay blend
                     alpha = overlay_opacity / 100.0
                     beta = 1.0 - alpha
-                    overlay = cv2.addWeighted(shifted_overlay, alpha, fluo_rgb, beta, 0)
+                    overlay = cv2.addWeighted(shifted_image, alpha, fluo_rgb, beta, 0)
                     
                     # Add download button
                     buf = io.BytesIO()
@@ -311,80 +322,82 @@ def app():
         with right_col:
             st.subheader("Aligned Overlay")
             
-            # Use CSS to create the overlay effect for better performance
-            # Streamlit HTML component
-            st.markdown("""
+            # Prepare images for the overlay display
+            # For fluorescence image (background)
+            if len(fluo_array.shape) == 2:
+                fluo_img = auto_contrast(fluo_array.copy())
+                # Apply colormap for single-channel fluorescence
+                fluo_img = Image.fromarray(
+                    cv2.applyColorMap((fluo_img * 255).astype(np.uint8), cv2.COLORMAP_HOT)
+                )
+            else:
+                fluo_img = Image.fromarray(
+                    (auto_contrast(fluo_array) * 255).astype(np.uint8)
+                )
+            
+            # For overlay image (DIC/mask)
+            if is_mask:
+                if len(mask_array.shape) == 2:
+                    # Convert binary mask to RGB with Fire LUT
+                    mask_bin = (mask_array > 0).astype(np.uint8)
+                    overlay_img = Image.fromarray(apply_fire_lut_to_binary(mask_bin))
+                else:
+                    overlay_img = Image.fromarray(mask_array)
+            else:
+                # Process DIC image
+                if len(dic_array.shape) == 2:
+                    # Convert grayscale to RGB
+                    dic_rgb = cv2.cvtColor(
+                        (auto_contrast(dic_array) * 255).astype(np.uint8),
+                        cv2.COLOR_GRAY2RGB
+                    )
+                    overlay_img = Image.fromarray(dic_rgb)
+                else:
+                    overlay_img = Image.fromarray(
+                        (auto_contrast(dic_array) * 255).astype(np.uint8)
+                    )
+            
+            # Use Streamlit custom CSS for the overlay
+            # This approach is more efficient than generating a new image for each adjustment
+            
+            # Write the CSS for the overlay container
+            st.markdown(f"""
             <style>
-            .overlay-container {
+            .overlay-container {{
                 position: relative;
                 width: 100%;
-                max-width: 100%;
-            }
-            .base-image {
-                width: 100%;
+            }}
+            .base-image {{
                 display: block;
-            }
-            .overlay-image {
+                width: 100%;
+            }}
+            .overlay-image {{
                 position: absolute;
                 top: 0;
                 left: 0;
                 width: 100%;
-                pointer-events: none;
-            }
+                opacity: {overlay_opacity/100};
+                transform: translate({x_shift}px, {y_shift}px);
+            }}
             </style>
             """, unsafe_allow_html=True)
             
-            # Prepare the base (fluorescence) image
-            if len(fluo_array.shape) == 2:
-                fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
-                cmap = plt.cm.get_cmap('hot')
-                fluo_colored = cmap(fluo_contrast)
-                fluo_rgb = (fluo_colored[:, :, :3] * 255).astype(np.uint8)
-            else:
-                fluo_rgb = (auto_contrast(fluo_array) * 255).astype(np.uint8)
-                if len(fluo_rgb.shape) == 3 and fluo_rgb.shape[2] > 3:
-                    fluo_rgb = fluo_rgb[:, :, :3]
+            # Create a container for the overlay
+            overlay_container = st.container()
             
-            # Prepare the overlay (DIC/mask) image
-            if is_mask:
-                # Create colored mask
-                if len(mask_array.shape) == 2:
-                    mask_bin = (mask_array > 0).astype(np.uint8)
-                    overlay_rgb = apply_fire_lut_to_binary(mask_bin)
-                else:
-                    overlay_rgb = mask_array
-            else:
-                # Use DIC image
-                if len(dic_array.shape) == 2:
-                    overlay_rgb = cv2.cvtColor((auto_contrast(dic_array) * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
-                else:
-                    overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
+            # Display the overlay (using two columns as a workaround for positioning)
+            overlay_col1, overlay_col2 = overlay_container.columns([1, 1])
             
-            # Convert images to PIL format
-            fluo_pil = Image.fromarray(fluo_rgb)
-            overlay_pil = Image.fromarray(overlay_rgb)
-            
-            # Save images to buffer and convert to base64
-            fluo_buffer = io.BytesIO()
-            fluo_pil.save(fluo_buffer, format="PNG")
-            fluo_base64 = base64.b64encode(fluo_buffer.getvalue()).decode()
-            
-            overlay_buffer = io.BytesIO()
-            overlay_pil.save(overlay_buffer, format="PNG")
-            overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
-            
-            # Display the overlay using HTML/CSS
-            html = f"""
-            <div class="overlay-container">
-                <img src="data:image/png;base64,{fluo_base64}" class="base-image">
-                <img src="data:image/png;base64,{overlay_base64}" 
-                     class="overlay-image" 
-                     style="transform: translate({x_shift}px, {y_shift}px); opacity: {overlay_opacity/100};">
-            </div>
-            """
-            
-            # Use components.html instead of markdown for better rendering
-            st.components.v1.html(html, height=height+50, scrolling=False)
+            with overlay_col1:
+                # Display the base image (fluorescence)
+                st.image(fluo_img, use_container_width=True, clamp=True)
+                
+                # Container for overlay image with CSS
+                st.markdown(f"""
+                <div class="overlay-container">
+                    <img src="data:image/png;base64,{overlay_img}" class="overlay-image">
+                </div>
+                """, unsafe_allow_html=True)
     
     # Instructions/guide
     with st.sidebar:
