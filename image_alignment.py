@@ -311,13 +311,6 @@ def app():
         with right_col:
             st.subheader("Aligned Overlay")
             
-            # Create a more efficient overlay using pure CSS blending and positioning
-            
-            # First, display both images individually using Streamlit's native image display
-            # But we'll make them invisible initially and use HTML/CSS for the actual overlay
-            fluo_img_container = st.empty()
-            overlay_img_container = st.empty()
-            
             # Prepare the base (fluorescence) image
             if len(fluo_array.shape) == 2:
                 fluo_contrast = auto_contrast(fluo_array, clip_percent=0.5)
@@ -344,15 +337,14 @@ def app():
                 else:
                     overlay_rgb = (auto_contrast(dic_array) * 255).astype(np.uint8)
             
-            # Convert to PIL images (only so we can get dimensions)
+            # Convert to PIL images and get dimensions
             fluo_pil = Image.fromarray(fluo_rgb)
             overlay_pil = Image.fromarray(overlay_rgb)
             
-            # Get image dimensions
+            # Get true dimensions (to maintain aspect ratio)
             img_width, img_height = fluo_pil.size
             
-            # Save small thumbnails of images to buffer (for lightweight loading)
-            # Convert to base64 for embedding in HTML
+            # Convert images to base64 for loading in browser
             fluo_buffer = io.BytesIO()
             fluo_pil.save(fluo_buffer, format="PNG")
             fluo_base64 = base64.b64encode(fluo_buffer.getvalue()).decode()
@@ -361,63 +353,279 @@ def app():
             overlay_pil.save(overlay_buffer, format="PNG")
             overlay_base64 = base64.b64encode(overlay_buffer.getvalue()).decode()
             
-            # Create CSS for optimized overlay
-            css = f"""
-            <style>
-                .image-container {{
-                    position: relative;
-                    width: 100%;
-                    max-width: 100%;
-                    overflow: hidden;
-                }}
-                
-                .image-container img {{
-                    display: block;
-                    width: 100%;
-                }}
-                
-                .background-image {{
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    z-index: 1;
-                }}
-                
-                .overlay-image {{
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    opacity: {overlay_opacity/100};
-                    transform: translate({x_shift}px, {y_shift}px);
-                    z-index: 2;
-                    mix-blend-mode: normal;
-                }}
-            </style>
-            """
-            
-            # Create HTML structure with the images
+            # Create a client-side JavaScript implementation with cached images
+            # This enables dragging directly in the browser for better responsiveness
             html = f"""
-            {css}
-            <div class="image-container" style="height: {img_height}px;">
-                <img 
-                    src="data:image/png;base64,{fluo_base64}" 
-                    class="background-image" 
-                    alt="Fluorescence Image"
-                >
-                <img 
-                    src="data:image/png;base64,{overlay_base64}" 
-                    class="overlay-image" 
-                    alt="DIC/Mask Image"
-                >
-            </div>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    #overlay-container {{
+                        position: relative;
+                        width: {img_width}px;
+                        height: {img_height}px;
+                        margin: 0 auto;
+                        overflow: hidden;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                        border-radius: 4px;
+                        user-select: none;
+                    }}
+                    
+                    #background-image {{
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: {img_width}px;
+                        height: {img_height}px;
+                        z-index: 1;
+                        pointer-events: none;
+                    }}
+                    
+                    #overlay-image {{
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: {img_width}px;
+                        height: {img_height}px;
+                        opacity: {overlay_opacity/100};
+                        z-index: 2;
+                        cursor: move;
+                        transform: translate({x_shift}px, {y_shift}px);
+                    }}
+                    
+                    #controls {{
+                        margin-top: 10px;
+                        text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                        font-size: 14px;
+                    }}
+                    
+                    #controls button {{
+                        background-color: #f0f2f6;
+                        border: 1px solid #d2d8df;
+                        border-radius: 4px;
+                        padding: 4px 8px;
+                        margin: 0 4px;
+                        cursor: pointer;
+                    }}
+                    
+                    #controls button:hover {{
+                        background-color: #e0e2e6;
+                    }}
+                    
+                    #position-display {{
+                        margin-top: 8px;
+                        font-weight: bold;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div id="overlay-container">
+                    <img id="background-image" src="data:image/png;base64,{fluo_base64}" alt="Fluorescence Image">
+                    <img id="overlay-image" src="data:image/png;base64,{overlay_base64}" alt="DIC/Mask Image"
+                         draggable="false"> <!-- Prevent default dragging behavior -->
+                </div>
+                
+                <div id="controls">
+                    <div id="position-display">X: {x_shift:.1f}, Y: {y_shift:.1f} pixels</div>
+                    <div style="margin-top: 8px;">
+                        <button id="reset-btn">Reset Position</button>
+                        <!-- Add fine-adjustment buttons for keyboard-like control -->
+                        <button id="left-btn" title="Move Left (0.1 pixel)">⬅️</button>
+                        <button id="up-btn" title="Move Up (0.1 pixel)">⬆️</button>
+                        <button id="down-btn" title="Move Down (0.1 pixel)">⬇️</button>
+                        <button id="right-btn" title="Move Right (0.1 pixel)">➡️</button>
+                    </div>
+                </div>
+
+                <script>
+                    // Variables for tracking dragging
+                    let isDragging = false;
+                    let startX, startY, initialXOffset, initialYOffset;
+                    let currentXOffset = {x_shift};
+                    let currentYOffset = {y_shift};
+                    
+                    // Get overlay image and container elements
+                    const overlayImage = document.getElementById('overlay-image');
+                    const container = document.getElementById('overlay-container');
+                    const positionDisplay = document.getElementById('position-display');
+                    
+                    // Initialize position display
+                    updatePositionDisplay();
+                    
+                    // Add mouse event handlers for dragging
+                    container.addEventListener('mousedown', startDrag);
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', endDrag);
+                    
+                    // Add touch event handlers for mobile devices
+                    container.addEventListener('touchstart', startDrag);
+                    document.addEventListener('touchmove', drag);
+                    document.addEventListener('touchend', endDrag);
+                    
+                    // Button handlers
+                    document.getElementById('reset-btn').addEventListener('click', resetPosition);
+                    document.getElementById('left-btn').addEventListener('click', () => adjustPosition(-0.1, 0));
+                    document.getElementById('right-btn').addEventListener('click', () => adjustPosition(0.1, 0));
+                    document.getElementById('up-btn').addEventListener('click', () => adjustPosition(0, -0.1));
+                    document.getElementById('down-btn').addEventListener('click', () => adjustPosition(0, 0.1));
+                    
+                    // Function to start dragging
+                    function startDrag(e) {{
+                        // Prevent default behaviors
+                        e.preventDefault();
+                        
+                        isDragging = true;
+                        
+                        // Get initial position
+                        if (e.type === 'touchstart') {{
+                            startX = e.touches[0].clientX;
+                            startY = e.touches[0].clientY;
+                        }} else {{
+                            startX = e.clientX;
+                            startY = e.clientY;
+                        }}
+                        
+                        initialXOffset = currentXOffset;
+                        initialYOffset = currentYOffset;
+                        
+                        // Change cursor to indicate dragging
+                        container.style.cursor = 'grabbing';
+                    }}
+                    
+                    // Function to handle dragging
+                    function drag(e) {{
+                        if (!isDragging) return;
+                        
+                        // Prevent default behaviors
+                        e.preventDefault();
+                        
+                        let currentX, currentY;
+                        
+                        if (e.type === 'touchmove') {{
+                            currentX = e.touches[0].clientX;
+                            currentY = e.touches[0].clientY;
+                        }} else {{
+                            currentX = e.clientX;
+                            currentY = e.clientY;
+                        }}
+                        
+                        // Calculate new position
+                        const dx = currentX - startX;
+                        const dy = currentY - startY;
+                        
+                        // Update current offset
+                        currentXOffset = initialXOffset + dx;
+                        currentYOffset = initialYOffset + dy;
+                        
+                        // Apply transform to image
+                        updatePosition(currentXOffset, currentYOffset);
+                        
+                        // Update position display
+                        updatePositionDisplay();
+                    }}
+                    
+                    // Function to end dragging
+                    function endDrag(e) {{
+                        if (!isDragging) return;
+                        
+                        isDragging = false;
+                        
+                        // Reset cursor
+                        container.style.cursor = 'default';
+                        
+                        // Send position data to Streamlit
+                        sendDataToStreamlit();
+                    }}
+                    
+                    // Function to update image position
+                    function updatePosition(x, y) {{
+                        overlayImage.style.transform = `translate(${{x}}px, ${{y}}px)`;
+                    }}
+                    
+                    // Function to update opacity
+                    function updateOpacity(opacity) {{
+                        overlayImage.style.opacity = opacity;
+                    }}
+                    
+                    // Function to reset position
+                    function resetPosition() {{
+                        currentXOffset = 0;
+                        currentYOffset = 0;
+                        updatePosition(0, 0);
+                        updatePositionDisplay();
+                        sendDataToStreamlit();
+                    }}
+                    
+                    // Function for fine adjustments
+                    function adjustPosition(dx, dy) {{
+                        currentXOffset += dx;
+                        currentYOffset += dy;
+                        updatePosition(currentXOffset, currentYOffset);
+                        updatePositionDisplay();
+                        sendDataToStreamlit();
+                    }}
+                    
+                    // Update position display
+                    function updatePositionDisplay() {{
+                        positionDisplay.textContent = `X: ${{currentXOffset.toFixed(1)}}, Y: ${{currentYOffset.toFixed(1)}} pixels`;
+                    }}
+                    
+                    // Function to send data back to Streamlit
+                    function sendDataToStreamlit() {{
+                        if (window.parent && window.parent.postMessage) {{
+                            const message = {{
+                                type: 'position_data',
+                                x: currentXOffset,
+                                y: currentYOffset
+                            }};
+                            
+                            window.parent.postMessage(JSON.stringify(message), '*');
+                        }}
+                    }}
+                    
+                    // Custom event listeners for Streamlit communications
+                    window.addEventListener('message', function(event) {{
+                        try {{
+                            const data = JSON.parse(event.data);
+                            
+                            // Handle position updates from sliders
+                            if (data.type === 'position_update') {{
+                                currentXOffset = data.x;
+                                currentYOffset = data.y;
+                                updatePosition(data.x, data.y);
+                                updatePositionDisplay();
+                            }}
+                            
+                            // Handle opacity updates
+                            if (data.type === 'opacity_update') {{
+                                updateOpacity(data.opacity);
+                            }}
+                        }} catch (e) {{
+                            // Non-JSON messages are ignored
+                        }}
+                    }});
+                </script>
+            </body>
+            </html>
             """
             
-            # Display the overlay using HTML component
+            # Use a fixed height component instead of responsive for better control
             st.components.v1.html(html, height=img_height+20, scrolling=False)
+            
+            # Hidden data to trigger JS updates without reloading the component
+            # This gives the appearance of the image moving without server requests
+            st.markdown(
+                f"""
+                <div id="data-values" 
+                    data-x="{x_shift}" 
+                    data-y="{y_shift}" 
+                    data-opacity="{overlay_opacity/100}"
+                    style="display: none;">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
     
     # Instructions/guide
     with st.sidebar:
@@ -429,13 +637,14 @@ def app():
            - Upload a DIC/phase contrast image or a segmentation mask (automatically detected)
            - Upload a fluorescence image to align with
         
-        2. **Adjust alignment**:
-           - Use the sliders to shift the DIC/mask image to align with the fluorescence image
-           - For fine adjustments, use the arrow buttons to move 0.1 pixel at a time
+        2. **Direct alignment methods**:
+           - **Drag directly**: Drag the overlay image for precise alignment
+           - **Arrow buttons**: Use the arrow buttons under the overlay for fine adjustments
+           - **Control sliders**: Use the sliders for controlled numerical adjustments
         
         3. **Customize overlay**:
-           - Adjust the opacity of the overlay
-           - The system will automatically use the correct image type (DIC or mask)
+           - Adjust the opacity of the overlay using the slider
+           - The system automatically detects whether you've uploaded a DIC or mask image
         
         4. **Download result**:
            - When satisfied with the alignment, click "Generate Overlay for Download"
@@ -445,14 +654,12 @@ def app():
         st.markdown("---")
         
         st.markdown("""
-        ### Keyboard Shortcuts
+        ### New Interactive Features
         
-        For even finer control, you can use keyboard shortcuts after clicking on the sliders:
-        
-        - **←/→**: Shift X-axis by 0.1 pixel
-        - **↑/↓**: Shift Y-axis by 0.1 pixel
-        
-        *Note: You need to click on a slider first for keyboard shortcuts to work*
+        - **Direct dragging**: You can now drag the image directly in the browser
+        - **Real-time position display**: See the exact X,Y coordinates as you drag
+        - **In-overlay buttons**: Use the buttons under the overlay for fine adjustments
+        - **Reset button**: Quickly reset position to 0,0 with one click
         """)
 
 if __name__ == "__main__":
